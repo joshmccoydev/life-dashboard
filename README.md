@@ -92,7 +92,7 @@ Hidden preview controls:
 - **Configured HTTP services**: timeout-bounded parallel checks, every 45 seconds by default (rounded up to the next browser poll).
 - **GitHub, when configured**: GraphQL contribution counts since local midnight, active contribution repos (up to 100), authored open PRs, and latest accessible repository push. Contribution counts follow GitHub's rules; they are not a count of every commit on every branch. Latest repository push is not necessarily a push you personally made. Private visibility depends on token permissions. A username alone enables the public-search adapter described below.
 
-The browser polls every 30 seconds; each adapter independently decides whether its cache needs refreshing. Weather 900s, systems 45s, GitHub/AI 180s, calendar/reminders/habits 120s, finance 1800s, health/goals 600s. Concurrent requests share in-flight work. Clock uses no API. Adapters refresh while the dashboard is open, not as background cron jobs.
+The browser polls every 30 seconds; each adapter independently decides whether its cache needs refreshing. Weather 900s, systems 45s, GitHub/AI 180s, calendar 30s, reminders/habits 120s, finance 1800s, health/goals 600s. Concurrent requests share in-flight work. Clock uses no API. Adapters refresh while the dashboard is open, not as background cron jobs.
 
 ## Mock integrations
 
@@ -130,7 +130,7 @@ tests/core.test.ts          Important logic and real local HTTP failure paths
 
 ## Apple Calendar, Reminders, and habits
 
-Run `npm run bridge:apple` on macOS to compile and launch the read-only EventKit bridge. Approve Calendar and Reminders in the macOS prompts. It writes an atomic snapshot every 60 seconds to ignored `.lifedash/apple-bridge.json`; adapters reject denied permissions and snapshots older than three minutes. Undated reminders remain undated. All accessible calendars retain their names and all-day flags. `WORK_CALENDARS` is a JSON array of exact calendar names, matched case-insensitively, to group as work; others group as personal. The bridge reads the current day plus the next seven days. The Work panel ignores all-day and already-ended events, then shows the next timed shift plus the next four timed shifts in chronological order. The Personal agenda appears only when there is a future timed personal event or an incomplete non-payment reminder. The two nearest ordinary reminders are ordered by due date (undated last).
+Run `npm run bridge:apple` on macOS to compile and launch the read-only EventKit bridge. Approve Calendar and Reminders in the macOS prompts. It writes an atomic snapshot every 30 seconds to ignored `.lifedash/apple-bridge.json`; adapters reject denied permissions and snapshots older than three minutes. Undated reminders remain undated. All accessible calendars retain their names and all-day flags. `WORK_CALENDARS` is a JSON array of exact calendar names, matched case-insensitively, to group as work; others group as personal. The bridge reads the current day plus the next seven days. The Work panel ignores all-day and already-ended events, then shows the next timed shift plus the next four timed shifts in chronological order. The Personal agenda appears only when there is a future timed personal event.
 
 For payments, create an Apple Reminders list named **Payments**. Add each payment with a title and due date. LifeDash removes those items from ordinary reminders and shows the next two dated, incomplete items under Upcoming Payments.
 

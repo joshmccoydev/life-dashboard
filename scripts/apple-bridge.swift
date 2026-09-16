@@ -78,7 +78,7 @@ import EventKit
                 try data.write(to: URL(fileURLWithPath: target), options: .atomic)
                 try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: target)
             } catch { fputs("LifeDash bridge could not write snapshot\n", stderr) }
-            try? await Task.sleep(for: .seconds(60))
+            try? await Task.sleep(for: .seconds(30))
         }
     }
 }
