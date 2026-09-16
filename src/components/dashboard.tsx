@@ -96,6 +96,9 @@ function workCalendarLabel(value: string | undefined) {
   const name = value || "Work";
   return name.replace(/^work\s*[-–—:]?\s*/i, "") || "Work";
 }
+function personalCalendarLabel(value: string | undefined) {
+  return (value || "Personal").replace(/\s+schedule$/i, "");
+}
 function workCalendarTone(value: string | undefined) {
   const hash = Array.from(value || "Work").reduce(
     (total, character) => (total * 31 + character.charCodeAt(0)) >>> 0,
@@ -299,10 +302,10 @@ function DomainSchedule({
   const upcoming = events
     .filter((event) => !event.allDay && Date.parse(event.end) > now.getTime())
     .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
-  const agendaLabel = view.previewTomorrow ? "Tomorrow" : "Today";
+  const later = upcoming.filter((event) => event !== next);
   return (
     <DomainSection
-      label={kind === "personal" ? agendaLabel : "Work schedule"}
+      label={kind === "personal" ? "Personal calendar" : "Work schedule"}
       source={data.calendar}
       now={now}
       className="domain-schedule"
@@ -311,9 +314,7 @@ function DomainSchedule({
         className={`domain-next-event ${kind === "work" ? "work-next-event" : ""}`}
       >
         <strong>
-          {next && kind === "work" ? (
-            <small>{weekday(next.start, display)}</small>
-          ) : null}
+          {next ? <small>{weekday(next.start, display)}</small> : null}
           {next ? time(next.start, display) : "All clear"}
         </strong>
         <div>
@@ -329,32 +330,29 @@ function DomainSchedule({
           </span>
         </div>
       </div>
-      {kind === "work" ? (
+      {later.length ? (
         <div className="domain-event-list">
-          {upcoming
-            .filter((event) => event !== next)
-            .slice(0, 4)
-            .map((event) => (
-              <div
-                className="domain-list-row"
-                key={`${event.id}-${event.start}`}
-              >
-                <span className="work-event-name">
-                  <i
-                    className={`work-calendar ${workCalendarTone(event.calendarName)}`}
-                  >
-                    {workCalendarLabel(event.calendarName)}
-                  </i>
-                  {event.title}
-                </span>
-                <strong>
-                  {weekday(event.start, display)} · {time(event.start, display)}
-                </strong>
-              </div>
-            ))}
-          {!upcoming.length ? (
-            <div className="domain-empty">No work events ahead</div>
-          ) : null}
+          {later.slice(0, kind === "work" ? 4 : 3).map((event) => (
+            <div className="domain-list-row" key={`${event.id}-${event.start}`}>
+              <span className="work-event-name">
+                <i
+                  className={`work-calendar ${kind === "personal" ? "personal-calendar" : workCalendarTone(event.calendarName)}`}
+                >
+                  {kind === "work"
+                    ? workCalendarLabel(event.calendarName)
+                    : personalCalendarLabel(event.calendarName)}
+                </i>
+                {event.title}
+              </span>
+              <strong>
+                {weekday(event.start, display)} · {time(event.start, display)}
+              </strong>
+            </div>
+          ))}
+        </div>
+      ) : !upcoming.length ? (
+        <div className="domain-empty">
+          No {kind === "work" ? "work" : "personal"} events ahead
         </div>
       ) : null}
     </DomainSection>

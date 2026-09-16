@@ -1733,6 +1733,13 @@ main.dashboard {
 .work-calendar.tone-2 {
   color: var(--secondary);
 }
+.work-calendar.personal-calendar {
+  max-width: 8.5rem;
+  overflow: hidden;
+  color: #bd93f9;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .domain-reminders .domain-list-row strong {
   color: var(--amber);
 }
