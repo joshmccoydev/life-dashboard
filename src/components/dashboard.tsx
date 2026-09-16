@@ -366,7 +366,7 @@ function DomainSchedule({
         <div className="domain-event-list">
           {upcoming
             .filter((event) => event !== next)
-            .slice(0, 2)
+            .slice(0, 4)
             .map((event) => (
               <div
                 className="domain-list-row"
@@ -933,6 +933,16 @@ function LiveDashboard({
   const offline = data.systems.data.endpoints.some(
     (e) => e.status === "offline",
   );
+  const hasPersonalAgenda =
+    data.calendar.data.events.some(
+      (event) =>
+        event.calendar === "personal" &&
+        !event.allDay &&
+        Date.parse(event.end) > now.getTime(),
+    ) ||
+    data.reminders.data.items.some(
+      (reminder) => !reminder.completed && !isPaymentReminder(reminder),
+    );
   const status =
     critical || offline
       ? "SYSTEM ATTENTION"
@@ -978,17 +988,23 @@ function LiveDashboard({
         <PanelBoundary name="Personal">
           <DomainColumn
             title="Personal"
-            subtitle="Today · payments · habits · health · money"
+            subtitle={
+              hasPersonalAgenda
+                ? "Agenda · payments · habits · health · money"
+                : "Payments · habits · health · money"
+            }
             icon={Activity}
-            className="personal-column"
+            className={`personal-column ${hasPersonalAgenda ? "has-agenda" : "no-agenda"}`}
           >
-            <DomainSchedule
-              kind="personal"
-              data={data}
-              now={now}
-              display={display}
-              mode={mode}
-            />
+            {hasPersonalAgenda ? (
+              <DomainSchedule
+                kind="personal"
+                data={data}
+                now={now}
+                display={display}
+                mode={mode}
+              />
+            ) : null}
             <DomainPayments data={data} now={now} display={display} />
             <DomainHabits data={data} now={now} display={display} />
             <DomainHealth data={data} now={now} />
