@@ -8,6 +8,7 @@ import type {
   HabitState,
   ReminderState,
 } from "@/domains/models";
+import { habitWeekDates } from "@/lib/habits";
 import { localDateKey } from "@/lib/time";
 export const appleBridgePath =
   process.env.APPLE_BRIDGE_PATH ||
@@ -25,6 +26,9 @@ export function normalizeAppleSnapshot(
     due: string | null;
     completed: boolean;
     completedAt: string | null;
+    recurring?: boolean;
+    recurrenceFrequency?: "daily" | "weekly" | "monthly" | "yearly" | "unknown";
+    recurrenceInterval?: number;
   };
   const body = payload as {
     version: number;
@@ -99,6 +103,8 @@ export function normalizeAppleSnapshot(
           string,
           HabitState["habits"][number]["occurrences"][number]
         >;
+        daily: boolean;
+        firstDue: string | null;
       }
     >();
     for (const item of body.habits.items) {
@@ -118,7 +124,23 @@ export function normalizeAppleSnapshot(
         sourceId: item.id,
         occurrences: [],
         occurrenceMap: new Map(),
+        daily: false,
+        firstDue: null,
       };
+      if (
+        item.recurring &&
+        item.recurrenceFrequency === "daily" &&
+        (item.recurrenceInterval ?? 1) === 1
+      )
+        habit.daily = true;
+      if (item.due) {
+        const dueDate = localDateKey(
+          new Date(item.due),
+          config.display.timezone,
+        );
+        if (!habit.firstDue || dueDate < habit.firstDue)
+          habit.firstDue = dueDate;
+      }
       const previous = habit.occurrenceMap.get(date);
       if (!previous || item.completed) {
         habit.occurrenceMap.set(date, {
@@ -132,12 +154,24 @@ export function normalizeAppleSnapshot(
     return {
       date: today,
       habits: [...grouped.values()]
-        .map(({ occurrenceMap, ...habit }) => ({
-          ...habit,
-          occurrences: [...occurrenceMap.values()].sort((a, b) =>
-            a.date.localeCompare(b.date),
-          ),
-        }))
+        .map(({ occurrenceMap, daily, firstDue, ...habit }) => {
+          if (daily && firstDue) {
+            for (const date of habitWeekDates(now, config.display.timezone)) {
+              if (date >= firstDue && date <= today && !occurrenceMap.has(date))
+                occurrenceMap.set(date, {
+                  date,
+                  completed: false,
+                  completedAt: null,
+                });
+            }
+          }
+          return {
+            ...habit,
+            occurrences: [...occurrenceMap.values()].sort((a, b) =>
+              a.date.localeCompare(b.date),
+            ),
+          };
+        })
         .sort((a, b) => a.title.localeCompare(b.title)),
     };
   }

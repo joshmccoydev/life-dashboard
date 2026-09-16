@@ -472,6 +472,43 @@ test("completed habits use completion day instead of an earlier due day", async 
   );
 });
 
+test("daily habits remain scheduled today when Apple leaves an overdue instance open", async () => {
+  const { normalizeAppleSnapshot } = await import("../src/adapters/apple");
+  const now = new Date("2026-09-16T12:00:00Z");
+  const habits = normalizeAppleSnapshot(
+    {
+      version: 1,
+      capturedAt: now.toISOString(),
+      permissions: { calendar: false, reminders: true },
+      habits: {
+        items: [
+          {
+            id: "walk-overdue",
+            title: "Morning walk",
+            due: "2026-09-15T05:00:00Z",
+            completed: false,
+            completedAt: null,
+            recurring: true,
+            recurrenceFrequency: "daily",
+            recurrenceInterval: 1,
+          },
+        ],
+      },
+    },
+    "habits",
+    now,
+  );
+  assert.deepEqual(
+    "habits" in habits
+      ? habits.habits[0].occurrences.map((item) => [item.date, item.completed])
+      : [],
+    [
+      ["2026-09-15", false],
+      ["2026-09-16", false],
+    ],
+  );
+});
+
 test("Apple goals and projects use dedicated reminder lists and notes", async () => {
   const { normalizeAppleSnapshot } = await import("../src/adapters/apple");
   const now = new Date("2026-09-16T12:00:00Z");

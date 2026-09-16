@@ -20,7 +20,17 @@ import EventKit
             "completedAt": reminder.completionDate.map { iso.string(from: $0) } as Any? ?? NSNull(),
             "listName": reminder.calendar.title
         ]
-        if reminder.hasRecurrenceRules { value["recurring"] = true }
+        if let rule = reminder.recurrenceRules?.first {
+            value["recurring"] = true
+            value["recurrenceInterval"] = rule.interval
+            switch rule.frequency {
+            case .daily: value["recurrenceFrequency"] = "daily"
+            case .weekly: value["recurrenceFrequency"] = "weekly"
+            case .monthly: value["recurrenceFrequency"] = "monthly"
+            case .yearly: value["recurrenceFrequency"] = "yearly"
+            @unknown default: value["recurrenceFrequency"] = "unknown"
+            }
+        }
         if let notes = reminder.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
             value["notes"] = notes
         }
