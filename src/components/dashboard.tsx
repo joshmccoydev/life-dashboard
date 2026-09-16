@@ -418,8 +418,9 @@ function DomainHabits({
           <div className="domain-empty">No habits in the Habits list</div>
         ) : (
           <div className="domain-section-summary">
-            Today · {today.filter(({ week }) => week.today?.completed).length}/
-            {today.length} complete
+            {today.length
+              ? `Today · ${today.filter(({ week }) => week.today?.completed).length} of ${today.length} scheduled complete`
+              : "No habits scheduled today"}
           </div>
         )}
       </div>
