@@ -4,6 +4,7 @@ import type {
   ReminderState,
   HealthState,
   HabitState,
+  GoalState,
   SystemMetric,
   HomeState,
   FinanceState,
@@ -28,6 +29,7 @@ export type CalendarAdapter = Adapter<CalendarState>;
 export type ReminderAdapter = Adapter<ReminderState>;
 export type AppleHealthAdapter = Adapter<HealthState>;
 export type HabitAdapter = Adapter<HabitState>;
+export type GoalAdapter = Adapter<GoalState>;
 export type FinanceAdapter = Adapter<FinanceState>;
 export type AITelemetryAdapter = Adapter<AITelemetryState>;
 export type HomeAssistantAdapter = Adapter<HomeState>;

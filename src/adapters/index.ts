@@ -11,6 +11,7 @@ import { githubAdapter } from "./github";
 import {
   appleBridgePath,
   appleCalendarAdapter,
+  appleGoalsAdapter,
   appleHabitsAdapter,
   appleRemindersAdapter,
 } from "./apple";
@@ -79,7 +80,11 @@ function createCaches() {
     ),
     ai: make("ai", mocks.mockAI, codexBinary ? codexAdapter : null),
     systems: make("systems", mocks.mockSystems, systemsAdapter),
-    goals: make("goals", mocks.mockGoals),
+    goals: make(
+      "goals",
+      mocks.mockGoals,
+      appleBridgePath ? appleGoalsAdapter : null,
+    ),
   };
 }
 const holder = globalThis as typeof globalThis & {

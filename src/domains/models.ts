@@ -40,6 +40,8 @@ export type ReminderState = {
     due: string | null;
     completed: boolean;
     listName?: string;
+    notes?: string | null;
+    dashboardRole?: "payment" | "goal" | "project" | "ordinary";
   }[];
 };
 export type FinanceState = {
@@ -109,8 +111,22 @@ export type SystemMetric = {
 };
 export type SystemState = { machine: SystemMetric; endpoints: SystemMetric[] };
 export type GoalState = {
-  goals: { title: string; current: number; target: number; unit: string }[];
-  projects: { name: string; detail: string; progress: number }[];
+  goals: {
+    id?: string;
+    title: string;
+    current?: number;
+    target?: number;
+    unit?: string;
+    detail?: string | null;
+    due?: string | null;
+  }[];
+  projects: {
+    id?: string;
+    name: string;
+    detail: string;
+    progress?: number;
+    due?: string | null;
+  }[];
 };
 export type HabitState = {
   habits: {

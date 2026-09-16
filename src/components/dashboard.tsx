@@ -24,7 +24,7 @@ import type {
 import { ageLabel, isStale, modeAt } from "@/lib/time";
 import { todayView } from "@/lib/today";
 import { habitWeek } from "@/lib/habits";
-import { isPaymentReminder, upcomingPayments } from "@/lib/payments";
+import { isOrdinaryReminder, upcomingPayments } from "@/lib/payments";
 import { evaluateAlerts, attentionView } from "@/lib/alerts";
 
 function Feed({ state, now }: { state: DataState<unknown>; now: Date }) {
@@ -296,8 +296,8 @@ function DomainSchedule({
   const view = todayView(
     events,
     kind === "personal"
-      ? data.reminders.data.items.filter(
-          (reminder) => !isPaymentReminder(reminder),
+      ? data.reminders.data.items.filter((reminder) =>
+          isOrdinaryReminder(reminder),
         )
       : [],
     now,
@@ -615,26 +615,56 @@ function DomainBuild({ data, now }: { data: DashboardData; now: Date }) {
 }
 
 function DomainProgress({ data, now }: { data: DashboardData; now: Date }) {
+  const goals = data.goals.data;
+  const due = (value: string | null | undefined) =>
+    value
+      ? new Intl.DateTimeFormat("en-US", {
+          timeZone: "UTC",
+          month: "short",
+          day: "numeric",
+        }).format(new Date(value))
+      : null;
+  const empty = !goals.projects.length && !goals.goals.length;
   return (
     <DomainSection label="Goals & projects" source={data.goals} now={now}>
       <div className="domain-progress-list">
-        {data.goals.data.projects.slice(0, 2).map((project) => (
-          <div key={project.name}>
+        {goals.projects.slice(0, 2).map((project) => (
+          <div key={project.id || project.name}>
             <div className="domain-list-row">
               <span>{project.name}</span>
-              <strong>{project.progress}%</strong>
+              <strong>
+                {project.progress !== undefined
+                  ? `${project.progress}%`
+                  : due(project.due) || "PROJECT"}
+              </strong>
             </div>
-            <Progress value={project.progress} />
+            {project.progress !== undefined ? (
+              <Progress value={project.progress} />
+            ) : (
+              <div className="domain-project-detail">{project.detail}</div>
+            )}
           </div>
         ))}
-        {data.goals.data.goals.slice(0, 2).map((goal) => (
-          <div className="domain-list-row" key={goal.title}>
-            <span>{goal.title}</span>
-            <strong>
-              {goal.current}/{goal.target} {goal.unit}
-            </strong>
+        {goals.goals.slice(0, 2).map((goal) => (
+          <div key={goal.id || goal.title}>
+            <div className="domain-list-row">
+              <span>{goal.title}</span>
+              <strong>
+                {goal.current !== undefined && goal.target !== undefined
+                  ? `${goal.current}/${goal.target} ${goal.unit || ""}`
+                  : due(goal.due) || "GOAL"}
+              </strong>
+            </div>
+            {goal.current === undefined && goal.detail ? (
+              <div className="domain-project-detail">{goal.detail}</div>
+            ) : null}
           </div>
         ))}
+        {empty ? (
+          <div className="domain-empty">
+            Add items to Goals or Projects in Reminders
+          </div>
+        ) : null}
       </div>
     </DomainSection>
   );
@@ -941,7 +971,7 @@ function LiveDashboard({
         Date.parse(event.end) > now.getTime(),
     ) ||
     data.reminders.data.items.some(
-      (reminder) => !reminder.completed && !isPaymentReminder(reminder),
+      (reminder) => !reminder.completed && isOrdinaryReminder(reminder),
     );
   const status =
     critical || offline

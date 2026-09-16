@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import type {
   Adapter,
   CalendarState,
+  GoalState,
   HabitState,
   ReminderState,
 } from "@/domains/models";
@@ -15,9 +16,9 @@ export const appleBridgePath =
     : null);
 export function normalizeAppleSnapshot(
   payload: unknown,
-  domain: "calendar" | "reminders" | "habits",
+  domain: "calendar" | "reminders" | "habits" | "goals",
   now: Date,
-): CalendarState | ReminderState | HabitState {
+): CalendarState | ReminderState | HabitState | GoalState {
   type HabitReminder = {
     id: string;
     title: string;
@@ -41,7 +42,8 @@ export function normalizeAppleSnapshot(
     captured > now.getTime() + 60000
   )
     throw new Error("Apple bridge snapshot stale; restart the bridge");
-  const permission = domain === "habits" ? "reminders" : domain;
+  const permission =
+    domain === "habits" || domain === "goals" ? "reminders" : domain;
   if (!body.permissions?.[permission])
     throw new Error(
       `Grant LifeDash Bridge ${domain} access in macOS Privacy & Security`,
@@ -146,21 +148,62 @@ export function normalizeAppleSnapshot(
         !r.id ||
         typeof r.title !== "string" ||
         typeof r.completed !== "boolean" ||
+        (r.notes !== undefined &&
+          r.notes !== null &&
+          typeof r.notes !== "string") ||
         (r.due !== null && !Number.isFinite(Date.parse(r.due))),
     )
   )
     throw new Error("Apple reminders snapshot invalid");
-  return {
-    items: [...body.reminders.items].sort(
+  const reminders = [...body.reminders.items]
+    .map((item) => {
+      const list = item.listName
+        ?.trim()
+        .toLocaleLowerCase(config.display.locale);
+      const role =
+        list === "payments"
+          ? ("payment" as const)
+          : list ===
+              config.goalsListName.toLocaleLowerCase(config.display.locale)
+            ? ("goal" as const)
+            : list ===
+                config.projectsListName.toLocaleLowerCase(config.display.locale)
+              ? ("project" as const)
+              : ("ordinary" as const);
+      return { ...item, dashboardRole: role };
+    })
+    .sort(
       (a, b) =>
         (a.due ? Date.parse(a.due) : Infinity) -
         (b.due ? Date.parse(b.due) : Infinity),
-    ),
+    );
+  if (domain === "goals") {
+    return {
+      goals: reminders
+        .filter((item) => !item.completed && item.dashboardRole === "goal")
+        .map((item) => ({
+          id: item.id,
+          title: item.title,
+          detail: item.notes?.trim() || null,
+          due: item.due,
+        })),
+      projects: reminders
+        .filter((item) => !item.completed && item.dashboardRole === "project")
+        .map((item) => ({
+          id: item.id,
+          name: item.title,
+          detail: item.notes?.trim() || "Next action not set",
+          due: item.due,
+        })),
+    };
+  }
+  return {
+    items: reminders,
   };
 }
-function appleAdapter<T extends CalendarState | ReminderState | HabitState>(
-  domain: "calendar" | "reminders" | "habits",
-): Adapter<T> {
+function appleAdapter<
+  T extends CalendarState | ReminderState | HabitState | GoalState,
+>(domain: "calendar" | "reminders" | "habits" | "goals"): Adapter<T> {
   return {
     provider: `Apple ${domain} bridge`,
     source: "real",
@@ -181,3 +224,4 @@ function appleAdapter<T extends CalendarState | ReminderState | HabitState>(
 export const appleCalendarAdapter = appleAdapter<CalendarState>("calendar");
 export const appleRemindersAdapter = appleAdapter<ReminderState>("reminders");
 export const appleHabitsAdapter = appleAdapter<HabitState>("habits");
+export const appleGoalsAdapter = appleAdapter<GoalState>("goals");

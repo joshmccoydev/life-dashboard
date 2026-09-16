@@ -91,6 +91,8 @@ export const config = {
   demo: process.env.LIFEDASH_DEMO === "true",
   workCalendars: workCalendars(),
   habitsListName: process.env.HABITS_LIST_NAME?.trim() || "Habits",
+  goalsListName: process.env.GOALS_LIST_NAME?.trim() || "Goals",
+  projectsListName: process.env.PROJECTS_LIST_NAME?.trim() || "Projects",
   githubToken: process.env.GITHUB_TOKEN,
   githubUsername: process.env.GITHUB_USERNAME,
   intervals: Object.fromEntries(

@@ -4,7 +4,16 @@ import { localDateKey } from "./time";
 const paymentsList = "payments";
 
 export function isPaymentReminder(reminder: ReminderState["items"][number]) {
-  return reminder.listName?.trim().toLocaleLowerCase() === paymentsList;
+  return (
+    reminder.dashboardRole === "payment" ||
+    reminder.listName?.trim().toLocaleLowerCase() === paymentsList
+  );
+}
+
+export function isOrdinaryReminder(reminder: ReminderState["items"][number]) {
+  return reminder.dashboardRole
+    ? reminder.dashboardRole === "ordinary"
+    : !isPaymentReminder(reminder);
 }
 
 export function upcomingPayments(

@@ -21,6 +21,9 @@ import EventKit
             "listName": reminder.calendar.title
         ]
         if reminder.hasRecurrenceRules { value["recurring"] = true }
+        if let notes = reminder.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+            value["notes"] = notes
+        }
         return value
     }
 

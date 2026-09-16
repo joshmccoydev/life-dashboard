@@ -28,7 +28,7 @@
     "finance": "mock",
     "health": "mock",
     "ai": "auto",
-    "goals": "mock"
+    "goals": "auto"
   },
   "services": [],
   "finance": {

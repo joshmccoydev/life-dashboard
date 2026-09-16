@@ -472,6 +472,74 @@ test("completed habits use completion day instead of an earlier due day", async 
   );
 });
 
+test("Apple goals and projects use dedicated reminder lists and notes", async () => {
+  const { normalizeAppleSnapshot } = await import("../src/adapters/apple");
+  const now = new Date("2026-09-16T12:00:00Z");
+  const snapshot = {
+    version: 1,
+    capturedAt: now.toISOString(),
+    permissions: { calendar: false, reminders: true },
+    reminders: {
+      items: [
+        {
+          id: "goal",
+          title: "Read 24 books",
+          notes: "Finish the current book",
+          due: "2026-12-31T06:00:00Z",
+          completed: false,
+          listName: "Goals",
+        },
+        {
+          id: "project",
+          title: "LifeDash",
+          notes: "Add durable habit history",
+          due: null,
+          completed: false,
+          listName: "Projects",
+        },
+        {
+          id: "ordinary",
+          title: "Buy coffee",
+          notes: null,
+          due: null,
+          completed: false,
+          listName: "Reminders",
+        },
+      ],
+    },
+  };
+  const goals = normalizeAppleSnapshot(snapshot, "goals", now);
+  assert.deepEqual(
+    "goals" in goals
+      ? {
+          goals: goals.goals.map((goal) => [goal.title, goal.detail, goal.due]),
+          projects: goals.projects.map((project) => [
+            project.name,
+            project.detail,
+            project.due,
+          ]),
+        }
+      : {},
+    {
+      goals: [
+        ["Read 24 books", "Finish the current book", "2026-12-31T06:00:00Z"],
+      ],
+      projects: [["LifeDash", "Add durable habit history", null]],
+    },
+  );
+  const reminders = normalizeAppleSnapshot(snapshot, "reminders", now);
+  assert.deepEqual(
+    "items" in reminders
+      ? reminders.items.map((item) => [item.title, item.dashboardRole])
+      : [],
+    [
+      ["Read 24 books", "goal"],
+      ["LifeDash", "project"],
+      ["Buy coffee", "ordinary"],
+    ],
+  );
+});
+
 test("habit summaries distinguish scheduled days and calculate streaks", async () => {
   const { habitWeek } = await import("../src/lib/habits");
   const now = zonedDateTime("2026-09-15", 20, 0, zone);

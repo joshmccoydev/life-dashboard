@@ -96,7 +96,7 @@ The browser polls every 30 seconds; each adapter independently decides whether i
 
 ## Mock integrations
 
-**Finance, goals, and projects remain demo/local data. Calendar, Reminders, and Habits become live after bridge authorization; Health becomes real after an iPhone sync or local import.** Every affected section carries a `DEMO` label. GitHub is demo without a username. Demo alerts explicitly include “demo.” Mock calendar data regenerates from actual local dates, so it stays coherent across days. Nothing shown as demo should be interpreted as your real balances, fitness, calendar, or provider usage. Codex quota windows and available reset credits are live when the signed-in local Codex executable is available; activity counters remain unknown. Cursor and Grok Bot stay visibly `SETUP NEEDED` until a supported source writes the optional local usage snapshot.
+**Finance remains demo/local data. Calendar, Reminders, Habits, Goals, and Projects become live after bridge authorization; Health becomes real after an iPhone sync or local import.** Every affected section carries a `DEMO` label. GitHub is demo without a username. Demo alerts explicitly include “demo.” Mock calendar data regenerates from actual local dates, so it stays coherent across days. Nothing shown as demo should be interpreted as your real balances, fitness, calendar, or provider usage. Codex quota windows and available reset credits are live when the signed-in local Codex executable is available; activity counters remain unknown. Cursor and Grok Bot stay visibly `SETUP NEEDED` until a supported source writes the optional local usage snapshot.
 
 ## Reliability and attention rules
 
@@ -136,6 +136,8 @@ For payments, create an Apple Reminders list named **Payments**. Add each paymen
 
 For habits, create an Apple Reminders list named **Habits**. Add one recurring reminder per habit, with a due date and recurrence schedule, then complete it normally from iPhone, Watch, Mac, or Siri. LifeDash excludes that list from Today, retains 35 days of recent completion history, and shows the current Monday–Sunday week. It groups recurring occurrences by reminder title, so keep each title unique and avoid renaming it if you want a continuous streak. Set `HABITS_LIST_NAME` in the shell before `npm run bridge:apple` and in `.env.local` only if you use a different list name. Restart the bridge after changing the name.
 
+For goals and projects, create Apple Reminders lists named **Goals** and **Projects**. Each incomplete reminder becomes one dashboard item: the title is its name, Notes is the visible context or next action, and the due date is the target date. Completing the reminder removes it from the active dashboard. Set `GOALS_LIST_NAME` or `PROJECTS_LIST_NAME` in `.env.local` only when using different list names. The bridge remains read-only.
+
 The bridge never creates, edits or deletes items. macOS requests full EventKit access even though this implementation only reads. Stop it with Activity Monitor (LifeDashBridge); restarting it rechecks permissions. No automatic login startup is installed. Local calendar snapshots are private plaintext files; keep this dashboard on a trusted local network. Apple Health requires a separate supported iPhone/export path; EventKit does not expose HealthKit data.
 
 ```text
@@ -146,15 +148,15 @@ Apple Calendar / Reminders / Habits → LifeDash macOS Bridge → normalized ada
 
 - **Health:** keep it local and summary-only. The existing authenticated Apple Health receiver is the first path: Health Auto Export or an iPhone Shortcut sends daily steps, sleep, active energy, exercise and ring goals. Add workouts only after daily totals prove reliable. A native iOS companion is a later option, not a V1 dependency.
 - **Money:** keep Upcoming Payments in Apple Reminders now. Next, add a manual CSV/OFX import for monthly spending, cash flow and account-balance trends without storing bank credentials. A read-only aggregation provider can follow after its cost, institution coverage and privacy tradeoffs are accepted; transactions and credentials should never be exposed to the TV browser.
-- **Goals and projects:** replace decorative percentages with honest next actions. Use dedicated `Goals` and `Projects` Reminders lists for target dates and next steps, then combine those with GitHub repository activity for software projects. Progress should come from completed milestones, never a guessed score.
+- **Goals and projects:** live Apple Reminders lists now replace decorative percentages with target dates and next actions. A later pass can combine those items with GitHub repository activity for software projects; progress should come from completed milestones, never a guessed score.
 - **Personal-machine telemetry when hosted:** the built-in CPU/RAM/disk adapter always measures the machine running LifeDash. A VPS therefore shows VPS health. A future authenticated Mac heartbeat can push Mac CPU, memory, disk, battery and last-seen status to the hosted dashboard while keeping the VPS as a separate host.
 - **Home:** stay read-only and exception-oriented: home/away state, unlocked doors, lights left on, temperature and active scene. Home Assistant remains the preferred bridge for Hue/HomeKit-adjacent devices. Until it is connected, this panel is intentionally only a prepared slot.
 
 ## Planned integrations
 
 1. Microsoft Graph: Outlook/Teams meeting summaries and workday timing only.
-2. Goals/projects from Apple Reminders plus GitHub repository activity.
-3. Home Assistant/Hue: read-only state and exception summaries.
+2. Home Assistant/Hue: read-only state and exception summaries.
+3. Finance import/aggregation after the local HUD proves useful.
 
 Later: finance import/aggregation, richer Apple Health workout sync, a personal-machine heartbeat, and provider-specific documented AI telemetry. Contracts exist; these integrations do not.
 
