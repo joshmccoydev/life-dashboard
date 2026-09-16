@@ -938,7 +938,7 @@ function LiveDashboard({
         <PanelBoundary name="Work and Build">
           <DomainColumn
             title="Work & Build"
-            subtitle="Schedule · GitHub · projects"
+            subtitle="Schedule · projects · GitHub"
             icon={Code2}
             className="work-column"
           >
@@ -949,25 +949,19 @@ function LiveDashboard({
               display={display}
               mode={mode}
             />
-            <DomainBuild data={data} now={now} />
             <DomainProjects data={data} now={now} />
+            <DomainBuild data={data} now={now} />
           </DomainColumn>
         </PanelBoundary>
         <PanelBoundary name="Digital">
           <DomainColumn
             title="Digital"
-            subtitle="AI · Mac · network · home"
+            subtitle="Mac · network · AI"
             icon={Server}
             className="digital-column"
           >
-            <DomainAI data={data} now={now} />
             <DomainSystems data={data} now={now} history={systemHistory} />
-            <DomainSection label="Home" now={now} className="domain-home">
-              <div className="domain-list-row">
-                <span>Home Assistant / Hue</span>
-                <strong>PREPARED</strong>
-              </div>
-            </DomainSection>
+            <DomainAI data={data} now={now} />
           </DomainColumn>
         </PanelBoundary>
       </div>

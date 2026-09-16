@@ -1598,10 +1598,10 @@ main.dashboard {
   grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 .work-column .domain-column-content {
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 .digital-column .domain-column-content {
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
 }
 .domain-section {
   min-width: 0;
