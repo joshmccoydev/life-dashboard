@@ -130,13 +130,6 @@ function usageTone(value: number | null) {
         ? "metric-mid"
         : "metric-low";
 }
-function money(value: number, display: DisplayConfig) {
-  return new Intl.NumberFormat(display.locale, {
-    style: "currency",
-    currency: display.currency,
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 const Clock = memo(function Clock({
   display,
   initialTime,
@@ -470,84 +463,6 @@ function DomainPayments({
       {!payments.length ? (
         <div className="domain-empty">No upcoming payments</div>
       ) : null}
-    </DomainSection>
-  );
-}
-
-function DomainHealth({ data, now }: { data: DashboardData; now: Date }) {
-  const health = data.health.data;
-  const sleep =
-    health.sleepMinutes === null
-      ? "—"
-      : `${Math.floor(health.sleepMinutes / 60)}h ${Math.round(health.sleepMinutes % 60)}m`;
-  return (
-    <DomainSection label="Health" source={data.health} now={now}>
-      <div className="domain-metrics four">
-        <div>
-          <strong>{health.steps?.toLocaleString() ?? "—"}</strong>
-          <span>steps</span>
-        </div>
-        <div>
-          <strong>{sleep}</strong>
-          <span>sleep</span>
-        </div>
-        <div>
-          <strong>
-            {health.activityPercent ?? "—"}
-            {health.activityPercent !== null ? "%" : ""}
-          </strong>
-          <span>move</span>
-        </div>
-        <div>
-          <strong>
-            {health.exerciseMinutes ?? "—"}
-            {health.exerciseMinutes !== null ? "m" : ""}
-          </strong>
-          <span>exercise</span>
-        </div>
-      </div>
-      {health.workout ? (
-        <div className="domain-section-summary positive">{health.workout}</div>
-      ) : null}
-    </DomainSection>
-  );
-}
-
-function DomainMoney({
-  data,
-  now,
-  display,
-}: {
-  data: DashboardData;
-  now: Date;
-  display: DisplayConfig;
-}) {
-  const finance = data.finance.data;
-  const fund = Math.round(
-    (finance.emergencyFund / finance.emergencyTarget) * 100,
-  );
-  return (
-    <DomainSection label="Money" source={data.finance} now={now}>
-      <div className="domain-metrics four compact">
-        <div>
-          <strong>{money(finance.checking, display)}</strong>
-          <span>checking</span>
-        </div>
-        <div>
-          <strong>{money(finance.savings, display)}</strong>
-          <span>savings</span>
-        </div>
-        <div>
-          <strong>{fund}%</strong>
-          <span>emergency fund</span>
-        </div>
-        <div>
-          <strong>
-            {money(finance.spendingBudget - finance.spending, display)}
-          </strong>
-          <span>budget left</span>
-        </div>
-      </div>
     </DomainSection>
   );
 }
@@ -947,19 +862,16 @@ function LiveDashboard({
     });
   const attention = attentionView(alerts, mode, rotation);
   const critical = alerts.some((a) => a.level === "critical");
-  const live = Object.values(data).filter((d) => d.source === "real").length;
-  const totalFeeds = Object.keys(data).length;
-  const sourceProblems = Object.values(data).some(
+  const visibleFeeds = Object.entries(data)
+    .filter(([domain]) => domain !== "health" && domain !== "finance")
+    .map(([, state]) => state);
+  const live = visibleFeeds.filter((state) => state.source === "real").length;
+  const totalFeeds = visibleFeeds.length;
+  const sourceProblems = visibleFeeds.some(
     (d) => d.status !== "ready" || isStale(d.lastSuccess, now, d.refreshMs),
   );
   const offline = data.systems.data.endpoints.some(
     (e) => e.status === "offline",
-  );
-  const hasPersonalAgenda = data.calendar.data.events.some(
-    (event) =>
-      event.calendar === "personal" &&
-      !event.allDay &&
-      Date.parse(event.end) > now.getTime(),
   );
   const status =
     critical || offline
@@ -1006,28 +918,20 @@ function LiveDashboard({
         <PanelBoundary name="Personal">
           <DomainColumn
             title="Personal"
-            subtitle={
-              hasPersonalAgenda
-                ? "Agenda · payments · habits · goals · health · money"
-                : "Payments · habits · goals · health · money"
-            }
+            subtitle="Calendar · habits · payments · goals"
             icon={Activity}
-            className={`personal-column ${hasPersonalAgenda ? "has-agenda" : "no-agenda"}`}
+            className="personal-column"
           >
-            {hasPersonalAgenda ? (
-              <DomainSchedule
-                kind="personal"
-                data={data}
-                now={now}
-                display={display}
-                mode={mode}
-              />
-            ) : null}
-            <DomainPayments data={data} now={now} display={display} />
+            <DomainSchedule
+              kind="personal"
+              data={data}
+              now={now}
+              display={display}
+              mode={mode}
+            />
             <DomainHabits data={data} now={now} display={display} />
+            <DomainPayments data={data} now={now} display={display} />
             <DomainGoals data={data} now={now} />
-            <DomainHealth data={data} now={now} />
-            <DomainMoney data={data} now={now} display={display} />
           </DomainColumn>
         </PanelBoundary>
         <PanelBoundary name="Work and Build">
