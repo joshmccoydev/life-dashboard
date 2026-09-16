@@ -1,0 +1,61 @@
+{
+  "display": {
+    "locale": "en-US",
+    "currency": "USD",
+    "rotationSeconds": 25,
+    "pixelShift": true
+  },
+  "modes": { "morning": 6, "day": 9, "evening": 17, "night": 22 },
+  "refreshSeconds": {
+    "weather": 900,
+    "systems": 45,
+    "build": 180,
+    "calendar": 120,
+    "reminders": 120,
+    "habits": 120,
+    "finance": 1800,
+    "health": 600,
+    "ai": 180,
+    "goals": 600
+  },
+  "adapters": {
+    "weather": "auto",
+    "systems": "auto",
+    "build": "auto",
+    "calendar": "auto",
+    "reminders": "auto",
+    "habits": "auto",
+    "finance": "mock",
+    "health": "mock",
+    "ai": "auto",
+    "goals": "mock"
+  },
+  "services": [],
+  "finance": {
+    "checking": 4284,
+    "savings": 6120,
+    "emergencyFund": 7620,
+    "emergencyTarget": 10000,
+    "paydayDayOfWeek": 5,
+    "spending": 1842,
+    "spendingBudget": 2800,
+    "investments": 28460,
+    "investmentChange": 2.4
+  },
+  "goals": [
+    { "title": "Run 100 miles", "current": 68, "target": 100, "unit": "mi" },
+    { "title": "Read 24 books", "current": 17, "target": 24, "unit": "books" }
+  ],
+  "projects": [
+    {
+      "name": "LifeDash",
+      "detail": "A quieter view of everything that matters",
+      "progress": 72
+    },
+    {
+      "name": "Homelab refresh",
+      "detail": "Backups, monitoring & a little less maintenance",
+      "progress": 45
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+.sites-runtime/
+.DS_Store
+node_modules/
+.next/
+.env*
+!.env.example
+.lifedash/
+coverage/
+*.tsbuildinfo
+
+__pycache__/
