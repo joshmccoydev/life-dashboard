@@ -1595,13 +1595,13 @@ main.dashboard {
   display: grid;
 }
 .personal-column.has-agenda .domain-column-content {
-  grid-template-rows: 1.12fr 0.62fr 1.08fr 0.74fr 0.7fr;
+  grid-template-rows: 1fr 0.55fr 1fr 0.75fr 0.65fr 0.62fr;
 }
 .personal-column.no-agenda .domain-column-content {
-  grid-template-rows: 0.68fr 1.22fr 0.82fr 0.76fr;
+  grid-template-rows: 0.62fr 1.1fr 0.78fr 0.7fr 0.68fr;
 }
 .work-column .domain-column-content {
-  grid-template-rows: 1.36fr 0.82fr 0.82fr;
+  grid-template-rows: 1.18fr 0.7fr 1.12fr;
 }
 .digital-column .domain-column-content {
   grid-template-rows: 0.9fr 1.32fr 0.38fr;
@@ -1866,6 +1866,36 @@ main.dashboard {
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.domain-project-list {
+  display: grid;
+  gap: var(--hud-space-2);
+}
+.domain-project {
+  min-width: 0;
+  border-bottom: 1px solid #343746;
+  padding-bottom: var(--hud-space-2);
+}
+.domain-project:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.domain-project .domain-list-row {
+  margin-top: 0;
+}
+.domain-project .domain-list-row > span {
+  color: #e1e7f0;
+  font-size: 0.78rem;
+}
+.domain-project p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 0.24rem;
+  color: var(--secondary);
+  font-size: 0.64rem;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .domain-provider-list .domain-list-row,
 .domain-status-list .domain-status-row {

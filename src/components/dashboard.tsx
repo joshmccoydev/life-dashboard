@@ -24,7 +24,7 @@ import type {
 import { ageLabel, isStale, modeAt } from "@/lib/time";
 import { todayView } from "@/lib/today";
 import { habitWeek } from "@/lib/habits";
-import { isOrdinaryReminder, upcomingPayments } from "@/lib/payments";
+import { upcomingPayments } from "@/lib/payments";
 import { evaluateAlerts, attentionView } from "@/lib/alerts";
 
 function Feed({ state, now }: { state: DataState<unknown>; now: Date }) {
@@ -295,11 +295,7 @@ function DomainSchedule({
   );
   const view = todayView(
     events,
-    kind === "personal"
-      ? data.reminders.data.items.filter((reminder) =>
-          isOrdinaryReminder(reminder),
-        )
-      : [],
+    [],
     now,
     display.timezone,
     mode,
@@ -340,29 +336,7 @@ function DomainSchedule({
           </span>
         </div>
       </div>
-      {kind === "personal" ? (
-        <div className="domain-reminders">
-          <div className="domain-inline-label">
-            <span>REMINDERS</span>
-            <Feed state={data.reminders} now={now} />
-          </div>
-          {view.reminders.slice(0, 2).map((reminder) => (
-            <div className="domain-list-row" key={reminder.id}>
-              <span>{reminder.title}</span>
-              <strong>
-                {reminder.due && Date.parse(reminder.due) < now.getTime()
-                  ? "OVERDUE"
-                  : reminder.due
-                    ? time(reminder.due, display)
-                    : "UNDATED"}
-              </strong>
-            </div>
-          ))}
-          {!view.reminders.length ? (
-            <div className="domain-empty">No incomplete reminders</div>
-          ) : null}
-        </div>
-      ) : (
+      {kind === "work" ? (
         <div className="domain-event-list">
           {upcoming
             .filter((event) => event !== next)
@@ -389,7 +363,7 @@ function DomainSchedule({
             <div className="domain-empty">No work events ahead</div>
           ) : null}
         </div>
-      )}
+      ) : null}
     </DomainSection>
   );
 }
@@ -614,45 +588,29 @@ function DomainBuild({ data, now }: { data: DashboardData; now: Date }) {
   );
 }
 
-function DomainProgress({ data, now }: { data: DashboardData; now: Date }) {
+function goalDue(value: string | null | undefined) {
+  return value
+    ? new Intl.DateTimeFormat("en-US", {
+        timeZone: "UTC",
+        month: "short",
+        day: "numeric",
+      }).format(new Date(value))
+    : null;
+}
+
+function DomainGoals({ data, now }: { data: DashboardData; now: Date }) {
   const goals = data.goals.data;
-  const due = (value: string | null | undefined) =>
-    value
-      ? new Intl.DateTimeFormat("en-US", {
-          timeZone: "UTC",
-          month: "short",
-          day: "numeric",
-        }).format(new Date(value))
-      : null;
-  const empty = !goals.projects.length && !goals.goals.length;
   return (
-    <DomainSection label="Goals & projects" source={data.goals} now={now}>
+    <DomainSection label="Goals" source={data.goals} now={now}>
       <div className="domain-progress-list">
-        {goals.projects.slice(0, 2).map((project) => (
-          <div key={project.id || project.name}>
-            <div className="domain-list-row">
-              <span>{project.name}</span>
-              <strong>
-                {project.progress !== undefined
-                  ? `${project.progress}%`
-                  : due(project.due) || "PROJECT"}
-              </strong>
-            </div>
-            {project.progress !== undefined ? (
-              <Progress value={project.progress} />
-            ) : (
-              <div className="domain-project-detail">{project.detail}</div>
-            )}
-          </div>
-        ))}
-        {goals.goals.slice(0, 2).map((goal) => (
+        {goals.goals.slice(0, 3).map((goal) => (
           <div key={goal.id || goal.title}>
             <div className="domain-list-row">
               <span>{goal.title}</span>
               <strong>
                 {goal.current !== undefined && goal.target !== undefined
                   ? `${goal.current}/${goal.target} ${goal.unit || ""}`
-                  : due(goal.due) || "GOAL"}
+                  : goalDue(goal.due) || "ACTIVE"}
               </strong>
             </div>
             {goal.current === undefined && goal.detail ? (
@@ -660,10 +618,44 @@ function DomainProgress({ data, now }: { data: DashboardData; now: Date }) {
             ) : null}
           </div>
         ))}
-        {empty ? (
-          <div className="domain-empty">
-            Add items to Goals or Projects in Reminders
-          </div>
+        {!goals.goals.length ? (
+          <div className="domain-empty">No active goals</div>
+        ) : null}
+      </div>
+    </DomainSection>
+  );
+}
+
+function DomainProjects({ data, now }: { data: DashboardData; now: Date }) {
+  const projects = data.goals.data.projects;
+  return (
+    <DomainSection
+      label="Projects"
+      source={data.goals}
+      now={now}
+      className="domain-projects"
+    >
+      <div className="domain-project-list">
+        {projects.slice(0, 4).map((project) => (
+          <article className="domain-project" key={project.id || project.name}>
+            <div className="domain-list-row">
+              <span>{project.name}</span>
+              <strong>
+                {project.progress !== undefined
+                  ? `${project.progress}%`
+                  : project.due
+                    ? `DUE ${goalDue(project.due)}`
+                    : "ACTIVE"}
+              </strong>
+            </div>
+            {project.progress !== undefined ? (
+              <Progress value={project.progress} />
+            ) : null}
+            <p>{project.detail}</p>
+          </article>
+        ))}
+        {!projects.length ? (
+          <div className="domain-empty">No active projects</div>
         ) : null}
       </div>
     </DomainSection>
@@ -963,16 +955,12 @@ function LiveDashboard({
   const offline = data.systems.data.endpoints.some(
     (e) => e.status === "offline",
   );
-  const hasPersonalAgenda =
-    data.calendar.data.events.some(
-      (event) =>
-        event.calendar === "personal" &&
-        !event.allDay &&
-        Date.parse(event.end) > now.getTime(),
-    ) ||
-    data.reminders.data.items.some(
-      (reminder) => !reminder.completed && isOrdinaryReminder(reminder),
-    );
+  const hasPersonalAgenda = data.calendar.data.events.some(
+    (event) =>
+      event.calendar === "personal" &&
+      !event.allDay &&
+      Date.parse(event.end) > now.getTime(),
+  );
   const status =
     critical || offline
       ? "SYSTEM ATTENTION"
@@ -1020,8 +1008,8 @@ function LiveDashboard({
             title="Personal"
             subtitle={
               hasPersonalAgenda
-                ? "Agenda · payments · habits · health · money"
-                : "Payments · habits · health · money"
+                ? "Agenda · payments · habits · goals · health · money"
+                : "Payments · habits · goals · health · money"
             }
             icon={Activity}
             className={`personal-column ${hasPersonalAgenda ? "has-agenda" : "no-agenda"}`}
@@ -1037,6 +1025,7 @@ function LiveDashboard({
             ) : null}
             <DomainPayments data={data} now={now} display={display} />
             <DomainHabits data={data} now={now} display={display} />
+            <DomainGoals data={data} now={now} />
             <DomainHealth data={data} now={now} />
             <DomainMoney data={data} now={now} display={display} />
           </DomainColumn>
@@ -1044,7 +1033,7 @@ function LiveDashboard({
         <PanelBoundary name="Work and Build">
           <DomainColumn
             title="Work & Build"
-            subtitle="Schedule · GitHub · progress"
+            subtitle="Schedule · GitHub · projects"
             icon={Code2}
             className="work-column"
           >
@@ -1056,7 +1045,7 @@ function LiveDashboard({
               mode={mode}
             />
             <DomainBuild data={data} now={now} />
-            <DomainProgress data={data} now={now} />
+            <DomainProjects data={data} now={now} />
           </DomainColumn>
         </PanelBoundary>
         <PanelBoundary name="Digital">
