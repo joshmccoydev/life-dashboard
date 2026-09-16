@@ -103,11 +103,12 @@ export function normalizeAppleSnapshot(
       const title = item.title.trim();
       if (!title) continue;
       const key = title.toLocaleLowerCase(config.display.locale);
-      const date = item.due
-        ? localDateKey(new Date(item.due), config.display.timezone)
-        : item.completedAt
+      const date =
+        item.completed && item.completedAt
           ? localDateKey(new Date(item.completedAt), config.display.timezone)
-          : today;
+          : item.due
+            ? localDateKey(new Date(item.due), config.display.timezone)
+            : today;
       const habit = grouped.get(key) || {
         id: key,
         title,

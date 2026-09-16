@@ -441,6 +441,37 @@ test("Apple habits group recurring reminder history by title and local date", as
   );
 });
 
+test("completed habits use completion day instead of an earlier due day", async () => {
+  const { normalizeAppleSnapshot } = await import("../src/adapters/apple");
+  const now = new Date("2026-09-16T12:00:00Z");
+  const habits = normalizeAppleSnapshot(
+    {
+      version: 1,
+      capturedAt: now.toISOString(),
+      permissions: { calendar: false, reminders: true },
+      habits: {
+        items: [
+          {
+            id: "read-late",
+            title: "Read 20 minutes",
+            due: "2026-09-15T05:00:00Z",
+            completed: true,
+            completedAt: "2026-09-16T05:22:50Z",
+          },
+        ],
+      },
+    },
+    "habits",
+    now,
+  );
+  assert.deepEqual(
+    "habits" in habits
+      ? habits.habits[0].occurrences.map((item) => [item.date, item.completed])
+      : [],
+    [["2026-09-16", true]],
+  );
+});
+
 test("habit summaries distinguish scheduled days and calculate streaks", async () => {
   const { habitWeek } = await import("../src/lib/habits");
   const now = zonedDateTime("2026-09-15", 20, 0, zone);
