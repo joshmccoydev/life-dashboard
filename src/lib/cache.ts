@@ -38,12 +38,28 @@ export async function refreshAdapter<T>(
         lastAttempt: now.toISOString(),
         refreshMs,
       };
-    log("adapter_switched_to_mock", { provider: adapter.provider });
+    if (adapter.source === "mock") {
+      log("adapter_switched_to_mock", { provider: adapter.provider });
+      return {
+        loading: false,
+        data: await fallback.fetch(now),
+        source: "mock",
+        provider: fallback.provider,
+        status: "error",
+        lastSuccess: null,
+        lastAttempt: now.toISOString(),
+        error: message,
+        refreshMs,
+      };
+    }
+    // Real source with no prior value: an explicit "no data" state. Demo content
+    // is only ever shown when the demo/mock source itself is selected up front.
+    log("adapter_no_data", { provider: adapter.provider, message });
     return {
       loading: false,
-      data: await fallback.fetch(now),
-      source: "mock",
-      provider: fallback.provider,
+      data: null,
+      source: adapter.source,
+      provider: adapter.provider,
       status: "error",
       lastSuccess: null,
       lastAttempt: now.toISOString(),

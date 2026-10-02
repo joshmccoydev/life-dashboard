@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { renderToString } from "react-dom/server";
 import type { Adapter, DataState, WeatherState } from "../src/domains/models";
 import { modeAt, isStale, zonedDateTime, localDateKey } from "../src/lib/time";
 import { evaluateAlerts } from "../src/lib/alerts";
@@ -8,7 +9,12 @@ import { refreshAdapter, AdapterCache, readState } from "../src/lib/cache";
 import { normalizeWeather, weatherCondition } from "../src/adapters/weather";
 import { normalizeGitHub } from "../src/adapters/github";
 import { selectAdapter, getDemoDashboard } from "../src/adapters";
-import { checkEndpoint } from "../src/adapters/systems";
+import {
+  INTERNET_TARGETS,
+  PROBE_USER_AGENT,
+  checkEndpoint,
+  checkInternet,
+} from "../src/adapters/systems";
 const modes = { morning: 6, day: 9, evening: 17, night: 22 };
 const zone = "America/Chicago";
 test("modes change at each configured boundary in display timezone", () => {
@@ -137,7 +143,7 @@ test("failure retains last known real data, then recovers on success", async () 
     new Date(now.getTime() + 60000),
     60000,
   );
-  assert.equal(stale.data.value, 42);
+  assert.equal(stale.data!.value, 42);
   assert.equal(stale.source, "real");
   assert.equal(stale.status, "stale");
   assert.equal(stale.lastSuccess, good.lastSuccess);
@@ -155,7 +161,7 @@ test("failure retains last known real data, then recovers on success", async () 
     "stale",
   );
 });
-test("cold failure shows labeled demo without claiming a real success", async () => {
+test("a failed live feed with no prior value yields no data instead of demo", async () => {
   const failed = {
     ...real,
     fetch: async () => {
@@ -169,10 +175,103 @@ test("cold failure shows labeled demo without claiming a real success", async ()
     new Date(),
     60000,
   );
-  assert.equal(result.source, "mock");
-  assert.equal(result.data.value, 7);
+  assert.equal(result.source, "real");
+  assert.equal(result.data, null);
   assert.equal(result.lastSuccess, null);
   assert.equal(result.status, "error");
+  assert.equal(result.error, "Unreachable");
+});
+test("dashboard renders without throwing when live feeds have no data", async () => {
+  const { Dashboard } = await import("../src/components/dashboard");
+  const data = await getDemoDashboard();
+  for (const state of Object.values(data)) {
+    state.data = null;
+    state.source = "real";
+    state.status = "error";
+    state.lastSuccess = null;
+    state.error = "Unavailable";
+  }
+  const html = renderToString(
+    Dashboard({
+      initial: data,
+      renderedAt: new Date().toISOString(),
+      display: {
+        timezone: "America/Chicago",
+        locale: "en-US",
+        currency: "USD",
+        rotationSeconds: 25,
+        pixelShift: false,
+        modes,
+      },
+      demo: false,
+      paused: false,
+    }),
+  );
+  assert.match(html, /No data/);
+  assert.match(html, /Weather unavailable/);
+});
+test("refresh response accepts no-data systems and rejects malformed dashboards", async () => {
+  const { normalizeDashboardResponse } = await import(
+    "../src/components/dashboard"
+  );
+  const data = await getDemoDashboard();
+  data.systems.data = null;
+
+  assert.equal(normalizeDashboardResponse({ data }).systems.data, null);
+  assert.throws(
+    () => normalizeDashboardResponse({ data: { systems: data.systems } }),
+    { message: "Invalid dashboard response" },
+  );
+  assert.throws(() => normalizeDashboardResponse({}), {
+    message: "Invalid dashboard response",
+  });
+});
+test("a failed demo source still shows labeled demo content", async () => {
+  const brokenDemo: Adapter<{ value: number }> = {
+    provider: "Broken demo",
+    source: "mock",
+    fetch: async () => {
+      throw new Error("Demo failed");
+    },
+  };
+  const result = await refreshAdapter(
+    brokenDemo,
+    mock,
+    undefined,
+    new Date(),
+    60000,
+  );
+  assert.equal(result.source, "mock");
+  assert.equal(result.data!.value, 7);
+  assert.equal(result.lastSuccess, null);
+  assert.equal(result.status, "error");
+});
+test("a stale live value keeps its data and asOf timestamp after a failure", async () => {
+  const now = new Date("2026-09-15T12:00:00Z");
+  let down = false;
+  const cache = new AdapterCache(
+    "asof",
+    {
+      ...real,
+      fetch: async () => {
+        if (down) throw new Error("Down");
+        return { value: 42 };
+      },
+    },
+    mock,
+    60000,
+    false,
+  );
+  const fresh = await cache.get(now);
+  assert.equal(fresh.status, "ready");
+  down = true;
+  const later = new Date(now.getTime() + 60000);
+  const stale = await cache.get(later);
+  assert.equal(stale.data!.value, 42);
+  assert.equal(stale.source, "real");
+  assert.equal(stale.status, "stale");
+  assert.equal(stale.lastSuccess, fresh.lastSuccess);
+  assert.equal(stale.lastAttempt, later.toISOString());
 });
 test("cache deduplicates simultaneous calls and respects refresh interval", async () => {
   let count = 0;
@@ -202,9 +301,9 @@ test("cache deduplicates simultaneous calls and respects refresh interval", asyn
 test("deterministic alerts cover offline service, disk, overdue, meeting, bill and stale feeds", async () => {
   const now = new Date();
   const data = await getDemoDashboard();
-  data.systems.data.machine.diskPercent = 91;
-  data.systems.data.endpoints[0].status = "offline";
-  data.calendar.data.events = [
+  data.systems.data!.machine.diskPercent = 91;
+  data.systems.data!.endpoints[0].status = "offline";
+  data.calendar.data!.events = [
     {
       id: "next",
       title: "Sync",
@@ -213,7 +312,7 @@ test("deterministic alerts cover offline service, disk, overdue, meeting, bill a
       calendar: "work",
     },
   ];
-  data.finance.data.bills = [
+  data.finance.data!.bills = [
     {
       title: "Insurance",
       amount: 100,
@@ -237,21 +336,23 @@ test("deterministic alerts cover offline service, disk, overdue, meeting, bill a
       id,
     );
   assert.equal(alerts[0].level, "critical");
-  data.systems.data.machine.diskPercent = 90;
+  data.systems.data!.machine.diskPercent = 90;
   assert.ok(!evaluateAlerts(data, now).some((a) => a.id === "disk-machine"));
 });
 test("calm data emits no attention alerts", async () => {
   const now = new Date();
   const data = await getDemoDashboard();
-  data.reminders.data.items = [];
-  data.calendar.data.events = [];
-  data.finance.data.bills = [];
+  data.reminders.data!.items = [];
+  data.calendar.data!.events = [];
+  data.finance.data!.bills = [];
   assert.deepEqual(evaluateAlerts(data, now), []);
 });
 test("HTTP checks recognize healthy, failed and timed-out endpoints without throwing", async () => {
   const server = createServer((request, response) => {
     if (request.url === "/slow") return;
-    response.writeHead(request.url === "/bad" ? 503 : 200);
+    response.writeHead(
+      request.url === "/bad" ? 503 : request.url === "/denied" ? 403 : 200,
+    );
     response.end("health");
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -270,6 +371,12 @@ test("HTTP checks recognize healthy, failed and timed-out endpoints without thro
         .status,
       "offline",
     );
+    const denied = await checkEndpoint(
+      { name: "Denied", url: `${base}/denied` },
+      "test-denied",
+    );
+    assert.equal(denied.status, "online");
+    assert.equal(denied.detail, "HTTP 403");
     const timeout = await checkEndpoint(
       { name: "Slow", url: `${base}/slow`, timeoutMs: 50 },
       "test-slow",
@@ -279,6 +386,106 @@ test("HTTP checks recognize healthy, failed and timed-out endpoints without thro
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+test("internet probe treats reachable HTTP errors as online", async () => {
+  const original = globalThis.fetch;
+  const sent: (RequestInit | undefined)[] = [];
+  globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
+    sent.push(init);
+    return new Response("denied", { status: 403 });
+  }) as typeof fetch;
+  try {
+    const metric = await checkInternet(INTERNET_TARGETS);
+    assert.equal(metric.id, "internet");
+    assert.equal(metric.status, "online");
+    assert.equal(metric.detail, "Healthy");
+    assert.ok(metric.latencyMs !== null);
+    assert.equal(sent.length, INTERNET_TARGETS.length);
+    for (const init of sent)
+      assert.equal(
+        (init?.headers as Record<string, string>)["user-agent"],
+        PROBE_USER_AGENT,
+      );
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+test("one reachable 403 probe and two successful probes stay online without alerts", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: unknown) =>
+    String(input) === INTERNET_TARGETS[0].url
+      ? new Response("denied", { status: 403 })
+      : new Response("ok", { status: 200 })) as typeof fetch;
+  try {
+    const metric = await checkInternet(INTERNET_TARGETS);
+    assert.equal(metric.status, "online");
+    assert.equal(metric.detail, "Healthy");
+
+    const data = await getDemoDashboard();
+    data.systems.source = "real";
+    data.systems.data!.endpoints = [metric];
+    const alerts = evaluateAlerts(data, new Date(), { includeDemo: false });
+    assert.ok(!alerts.some((alert) => alert.id.includes("internet")));
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+test("internet probe reports offline only when every target fails, after one retry", async () => {
+  const original = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls++;
+    throw Object.assign(new Error("timeout"), { name: "TimeoutError" });
+  }) as typeof fetch;
+  try {
+    const metric = await checkInternet(INTERNET_TARGETS);
+    assert.equal(metric.status, "offline");
+    assert.equal(metric.latencyMs, null);
+    assert.equal(
+      metric.detail,
+      `No connectivity (${INTERNET_TARGETS.length}/${INTERNET_TARGETS.length} probes failed)`,
+    );
+    assert.equal(calls, INTERNET_TARGETS.length * 2);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+test("partial probe failure is a degraded warning, never a critical outage", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: unknown) => {
+    if (String(input) === INTERNET_TARGETS[0].url)
+      throw Object.assign(new Error("timeout"), { name: "TimeoutError" });
+    return new Response("denied", { status: 403 });
+  }) as typeof fetch;
+  try {
+    const metric = await checkInternet(INTERNET_TARGETS);
+    assert.equal(metric.status, "unknown");
+    assert.match(metric.detail ?? "", /^Degraded \(1\/3 probes failed: Google/);
+    const data = await getDemoDashboard();
+    data.systems.source = "real";
+    data.systems.data!.endpoints = [metric];
+    const alerts = evaluateAlerts(data, new Date(), { includeDemo: false });
+    assert.ok(
+      alerts.some(
+        (a) => a.id === "degraded-internet" && a.level === "warning",
+      ),
+    );
+    assert.ok(!alerts.some((a) => a.level === "critical"));
+    metric.status = "online";
+    assert.ok(
+      !evaluateAlerts(data, new Date(), { includeDemo: false }).some(
+        (a) => a.id === "offline-internet",
+      ),
+    );
+    metric.status = "offline";
+    assert.ok(
+      evaluateAlerts(data, new Date(), { includeDemo: false }).some(
+        (a) => a.id === "offline-internet" && a.level === "critical",
+      ),
+    );
+  } finally {
+    globalThis.fetch = original;
   }
 });
 test("mock weather is never represented as live", async () => {
@@ -733,7 +940,7 @@ test("import freshness reflects import time rather than repeated file reads", as
   const result = await refreshAdapter(adapter, adapter, undefined, now, 600000);
   assert.equal(result.lastSuccess, "2026-09-15T12:00:00Z");
   assert.equal(result.status, "stale");
-  assert.equal(result.data.sleepMinutes, null);
+  assert.equal(result.data!.sleepMinutes, null);
 });
 
 test("Health sync authenticates and replaces daily totals without double counting", async () => {
@@ -890,8 +1097,8 @@ test("critical alerts stay visible and night suppresses routine alerts", async (
 test("live view suppresses fabricated demo urgency but still reports failed feeds", async () => {
   const now = new Date(),
     data = await getDemoDashboard();
-  data.systems.data.machine.diskPercent = 99;
-  data.reminders.data.items = [
+  data.systems.data!.machine.diskPercent = 99;
+  data.reminders.data!.items = [
     {
       id: "a",
       title: "Demo task",
@@ -899,8 +1106,8 @@ test("live view suppresses fabricated demo urgency but still reports failed feed
       completed: false,
     },
   ];
-  data.calendar.data.events = [];
-  data.finance.data.bills = [
+  data.calendar.data!.events = [];
+  data.finance.data!.bills = [
     {
       title: "Demo bill",
       amount: 10,

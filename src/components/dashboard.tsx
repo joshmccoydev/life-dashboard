@@ -41,7 +41,7 @@ function Feed({ state, now }: { state: DataState<unknown>; now: Date }) {
       {state.source === "mock"
         ? "DEMO"
         : state.provider === "Apple Health" &&
-            !(state.data as { syncedAt?: string }).syncedAt
+            !(state.data as { syncedAt?: string } | null)?.syncedAt
           ? "IMPORT"
           : "LIVE"}
       {stale ? (
@@ -186,6 +186,23 @@ const Clock = memo(function Clock({
 });
 function Weather({ data, now }: { data: DashboardData; now: Date }) {
   const weather = data.weather.data;
+  if (!weather)
+    return (
+      <div className="weather">
+        <div className="weather-main">
+          <Cloud aria-hidden="true" />
+          <span>—</span>
+          <div>
+            <strong>No data</strong>
+            <p>Weather unavailable</p>
+          </div>
+        </div>
+        <div className="weather-feed">
+          <Feed state={data.weather} now={now} />
+          <span>Feels like —</span>
+        </div>
+      </div>
+    );
   const Icon =
     weather.code >= 95
       ? Wind
@@ -286,7 +303,7 @@ function DomainSchedule({
   display: DisplayConfig;
   mode: Mode;
 }) {
-  const events = data.calendar.data.events.filter(
+  const events = (data.calendar.data?.events ?? []).filter(
     (event) => event.calendar === kind,
   );
   const view = todayView(
@@ -368,7 +385,7 @@ function DomainHabits({
   now: Date;
   display: DisplayConfig;
 }) {
-  const habits = data.habits.data.habits.map((habit) => ({
+  const habits = (data.habits.data?.habits ?? []).map((habit) => ({
     habit,
     week: habitWeek(habit, now, display.timezone),
   }));
@@ -436,7 +453,7 @@ function DomainPayments({
   display: DisplayConfig;
 }) {
   const payments = upcomingPayments(
-    data.reminders.data.items,
+    data.reminders.data?.items ?? [],
     now,
     display.timezone,
   );
@@ -468,6 +485,17 @@ function DomainPayments({
 
 function DomainBuild({ data, now }: { data: DashboardData; now: Date }) {
   const build = data.build.data;
+  if (!build)
+    return (
+      <DomainSection
+        label="GitHub today"
+        source={data.build}
+        now={now}
+        className="domain-grow"
+      >
+        <div className="domain-empty">No data</div>
+      </DomainSection>
+    );
   return (
     <DomainSection
       label="GitHub today"
@@ -514,6 +542,12 @@ function goalDue(value: string | null | undefined) {
 
 function DomainGoals({ data, now }: { data: DashboardData; now: Date }) {
   const goals = data.goals.data;
+  if (!goals)
+    return (
+      <DomainSection label="Goals" source={data.goals} now={now}>
+        <div className="domain-empty">No data</div>
+      </DomainSection>
+    );
   return (
     <DomainSection label="Goals" source={data.goals} now={now}>
       <div className="domain-progress-list">
@@ -541,7 +575,18 @@ function DomainGoals({ data, now }: { data: DashboardData; now: Date }) {
 }
 
 function DomainProjects({ data, now }: { data: DashboardData; now: Date }) {
-  const projects = data.goals.data.projects;
+  const projects = data.goals.data?.projects;
+  if (!projects)
+    return (
+      <DomainSection
+        label="Projects"
+        source={data.goals}
+        now={now}
+        className="domain-projects"
+      >
+        <div className="domain-empty">No data</div>
+      </DomainSection>
+    );
   return (
     <DomainSection
       label="Projects"
@@ -577,6 +622,7 @@ function DomainProjects({ data, now }: { data: DashboardData; now: Date }) {
 }
 
 function DomainAI({ data, now }: { data: DashboardData; now: Date }) {
+  const providers = data.ai.data?.providers ?? [];
   const until = (value: string | undefined, label: string) => {
     if (!value) return null;
     const minutes = Math.max(
@@ -594,7 +640,7 @@ function DomainAI({ data, now }: { data: DashboardData; now: Date }) {
   return (
     <DomainSection label="AI telemetry" source={data.ai} now={now}>
       <div className="domain-provider-list">
-        {data.ai.data.providers.slice(0, 5).map((provider) => (
+        {providers.slice(0, 5).map((provider) => (
           <div
             className="domain-list-row"
             key={provider.name}
@@ -624,6 +670,7 @@ function DomainAI({ data, now }: { data: DashboardData; now: Date }) {
             </div>
           </div>
         ))}
+        {!providers.length ? <div className="domain-empty">No data</div> : null}
       </div>
     </DomainSection>
   );
@@ -634,6 +681,41 @@ type SystemSample = {
   memory: number | null;
   disk: number | null;
 };
+
+export function normalizeDashboardResponse(value: unknown): DashboardData {
+  if (!value || typeof value !== "object" || !("data" in value))
+    throw new Error("Invalid dashboard response");
+  const data = (value as { data?: unknown }).data;
+  if (!data || typeof data !== "object")
+    throw new Error("Invalid dashboard response");
+  const keys: (keyof DashboardData)[] = [
+    "weather",
+    "calendar",
+    "reminders",
+    "finance",
+    "health",
+    "build",
+    "ai",
+    "systems",
+    "habits",
+    "goals",
+  ];
+  if (
+    !keys.every(
+      (key) => {
+        const feed = (data as Record<string, unknown>)[key];
+        return (
+          key in data &&
+          !!feed &&
+          typeof feed === "object" &&
+          "data" in feed
+        );
+      },
+    )
+  )
+    throw new Error("Invalid dashboard response");
+  return data as DashboardData;
+}
 
 function SystemSparkline({
   values,
@@ -672,6 +754,17 @@ function DomainSystems({
   history: SystemSample[];
 }) {
   const systems = data.systems.data;
+  if (!systems)
+    return (
+      <DomainSection
+        label="Systems & network"
+        source={data.systems}
+        now={now}
+        className="domain-grow"
+      >
+        <div className="domain-empty">No data</div>
+      </DomainSection>
+    );
   const metrics = [
     ["CPU", systems.machine.cpuPercent, history.map((sample) => sample.cpu)],
     [
@@ -775,9 +868,9 @@ function LiveDashboard({
   const [data, setData] = useState(initial);
   const [systemHistory, setSystemHistory] = useState<SystemSample[]>(() => [
     {
-      cpu: initial.systems.data.machine.cpuPercent,
-      memory: initial.systems.data.machine.memoryPercent,
-      disk: initial.systems.data.machine.diskPercent,
+      cpu: initial.systems.data?.machine.cpuPercent ?? null,
+      memory: initial.systems.data?.machine.memoryPercent ?? null,
+      disk: initial.systems.data?.machine.diskPercent ?? null,
     },
   ]);
   const [now, setNow] = useState(() => new Date(renderedAt));
@@ -810,18 +903,17 @@ function LiveDashboard({
           { signal: controller.signal, cache: "no-store" },
         );
         if (!response.ok) throw new Error("Refresh failed");
-        const json = await response.json();
-        if (!json.data?.systems?.data?.machine)
-          throw new Error("Invalid dashboard response");
+        const updatedData = normalizeDashboardResponse(await response.json());
+        const machine = updatedData.systems.data?.machine;
         if (!stopped) {
-          setData(json.data);
+          setData(updatedData);
           setSystemHistory((history) =>
             [
               ...history,
               {
-                cpu: json.data.systems.data.machine.cpuPercent,
-                memory: json.data.systems.data.machine.memoryPercent,
-                disk: json.data.systems.data.machine.diskPercent,
+                cpu: machine?.cpuPercent ?? null,
+                memory: machine?.memoryPercent ?? null,
+                disk: machine?.diskPercent ?? null,
               },
             ].slice(-18),
           );
@@ -869,11 +961,8 @@ function LiveDashboard({
   const sourceProblems = visibleFeeds.some(
     (d) => d.status !== "ready" || isStale(d.lastSuccess, now, d.refreshMs),
   );
-  const offline = data.systems.data.endpoints.some(
-    (e) => e.status === "offline",
-  );
   const status =
-    critical || offline
+    critical
       ? "SYSTEM ATTENTION"
       : connectionError || sourceProblems
         ? "FEED ATTENTION"
@@ -894,7 +983,7 @@ function LiveDashboard({
               lifedash
             </div>
             <div
-              className={`global-status ${critical || offline ? "critical" : sourceProblems || connectionError ? "caution" : ""}`}
+              className={`global-status ${critical ? "critical" : sourceProblems || connectionError ? "caution" : ""}`}
             >
               <i />
               {status}
