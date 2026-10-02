@@ -1,0 +1,282 @@
+/* LifeDash display system: calibrated for a 16:9 screen viewed at a distance. */
+:root {
+  color-scheme: dark;
+
+  /* Day palette: calm blue-green on OLED black, with state colors reserved for state. */
+  --color-canvas: #080b0d;
+  --color-surface: #0c1013;
+  --color-surface-raised: #11171b;
+  --color-surface-emphasis: #151e22;
+  --color-text: #f2f5f3;
+  --color-text-secondary: #bec9c8;
+  --color-text-muted: #8e9d9d;
+  --color-border: #263235;
+  --color-border-strong: #344448;
+  --color-accent: #8fc9be;
+  --color-accent-soft: #203631;
+  --color-state-good: #8fc5a2;
+  --color-state-caution: #e0b776;
+  --color-state-critical: #df8984;
+
+  /* Keep legacy selectors on the same palette while the stylesheet is migrated. */
+  --bg: var(--color-canvas);
+  --panel: var(--color-surface);
+  --text: var(--color-text);
+  --secondary: var(--color-text-secondary);
+  --muted: var(--color-text-muted);
+  --line: var(--color-border);
+  --blue: var(--color-accent);
+  --green: var(--color-state-good);
+  --amber: var(--color-state-caution);
+  --red: var(--color-state-critical);
+
+  --font-ui: var(--font-display), "Avenir Next", "Segoe UI", sans-serif;
+  --font-mono: "SFMono-Regular", "Cascadia Code", "Liberation Mono", monospace;
+  --type-tier-1: clamp(4rem, 4.45vw, 7rem);
+  --type-tier-2: clamp(1.75rem, 2.1vw, 3rem);
+  --type-tier-3: clamp(1.75rem, 1.8vw, 2.5rem);
+  --type-detail: clamp(1.25rem, 1.3vw, 1.9rem);
+  --type-micro: clamp(1.25rem, 1.2vw, 1.7rem);
+
+  --canvas-ratio: 16 / 9;
+  --overscan-inline: 3.25%;
+  --overscan-block: 3%;
+  --space-1: clamp(0.4rem, 0.45vw, 0.7rem);
+  --space-2: clamp(0.65rem, 0.75vw, 1rem);
+  --space-3: clamp(0.9rem, 1.1vw, 1.45rem);
+  --space-4: clamp(1.2rem, 1.55vw, 2rem);
+  --space-5: clamp(1.7rem, 2.2vw, 2.8rem);
+  --space-6: clamp(2.2rem, 3vw, 3.8rem);
+
+  --canvas-drift-x: 4px;
+  --canvas-drift-y: 4px;
+  --auto-dim-idle: 0.72;
+  --auto-dim-night: 0.62;
+  --display-luminance-day: 1;
+  --display-luminance-night: 0.35;
+
+  font-family: var(--font-ui);
+  font-synthesis: none;
+  font-size: clamp(16px, 0.875vw, 30px);
+  font-variant-numeric: tabular-nums lining-nums;
+  background: var(--color-canvas);
+  color: var(--color-text);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+  }
+}
+
+main.dashboard {
+  container: dashboard / inline-size;
+  aspect-ratio: var(--canvas-ratio);
+  width: 100%;
+  min-height: 0;
+  max-height: 100svh;
+  margin-inline: auto;
+  padding: var(--overscan-block) var(--overscan-inline);
+  gap: var(--space-3);
+  background: var(--color-canvas);
+}
+
+.domain-columns {
+  gap: var(--space-3);
+}
+
+.domain-column {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  border-radius: 0.75rem;
+}
+
+.domain-column-header {
+  min-height: 4rem;
+  padding: var(--space-3) var(--space-4);
+}
+
+.domain-column-header > svg,
+.domain-column-header h2 {
+  color: var(--color-accent);
+}
+
+.domain-column-header h2 {
+  font-size: var(--type-tier-3);
+  letter-spacing: -0.025em;
+}
+
+.domain-column-header span,
+.domain-section-header h3,
+.domain-inline-label > span:first-child {
+  font-size: var(--type-micro);
+  letter-spacing: 0.035em;
+}
+
+.domain-section {
+  padding: var(--space-3) var(--space-4);
+}
+
+.domain-next-event > strong {
+  color: var(--color-text);
+  font-size: var(--type-tier-2);
+}
+
+.domain-next-event > strong small {
+  font-size: var(--type-micro);
+}
+
+.domain-next-event h4 {
+  color: var(--color-text);
+  font-size: var(--type-tier-3);
+}
+
+.domain-next-event span,
+.domain-list-row,
+.domain-status-row,
+.domain-habit-row,
+.domain-empty,
+.domain-section-summary,
+.domain-project-detail,
+.domain-project .domain-list-row > span,
+.domain-project p,
+.domain-feature-row {
+  font-size: var(--type-detail);
+}
+
+.domain-list-row strong,
+.domain-status-row strong,
+.domain-habit-row strong,
+.domain-provider-value strong,
+.domain-provider-value small,
+.domain-feature-row strong {
+  font-size: var(--type-micro);
+}
+
+.domain-habit-days > div {
+  grid-template-columns: repeat(7, 0.62rem);
+  gap: 0.4rem;
+}
+
+.domain-habit-days i {
+  font-size: var(--type-micro);
+}
+
+.domain-habit-row .habit-week i {
+  width: 0.58rem;
+  height: 0.58rem;
+}
+
+.domain-metrics strong {
+  color: var(--color-text);
+  font-size: var(--type-tier-3);
+}
+
+.domain-metrics.compact strong {
+  font-size: var(--type-tier-3);
+}
+
+.domain-metrics span {
+  font-size: var(--type-micro);
+}
+
+.domain-project {
+  border-color: var(--color-border);
+}
+
+.domain-provider-list .domain-list-row,
+.domain-status-list .domain-status-row {
+  border-color: var(--color-border);
+}
+
+.domain-home .domain-list-row strong {
+  color: var(--color-text-secondary);
+}
+
+.mode-morning .personal-column,
+.mode-evening .personal-column,
+.mode-day .work-column {
+  border-color: var(--color-accent);
+}
+
+.mode-night {
+  --color-canvas: #050607;
+  --color-surface: #080a0b;
+  --color-surface-raised: #0b0e10;
+  --color-surface-emphasis: #101416;
+  --color-text: #c2c9c8;
+  --color-text-secondary: #a1acab;
+  --color-text-muted: #858f8e;
+  --color-border: #1d2425;
+  --color-border-strong: #283132;
+  --color-accent: #789b94;
+  --color-accent-soft: #192421;
+  --color-state-good: #78977f;
+  --color-state-caution: #a58a61;
+  --color-state-critical: #a46d69;
+  --bg: var(--color-canvas);
+  --panel: var(--color-surface);
+  --text: var(--color-text);
+  --secondary: var(--color-text-secondary);
+  --muted: var(--color-text-muted);
+  --line: var(--color-border);
+  --blue: var(--color-accent);
+  --green: var(--color-state-good);
+  --amber: var(--color-state-caution);
+  --red: var(--color-state-critical);
+  filter: brightness(var(--display-luminance-night));
+}
+
+.pixel-shift-1 .domain-columns,
+.pixel-shift-2 .domain-columns,
+.pixel-shift-3 .domain-columns {
+  animation: canvas-drift 180s ease-in-out infinite alternate;
+}
+
+@keyframes canvas-drift {
+  from {
+    transform: translate(calc(-1 * var(--canvas-drift-x)), calc(-1 * var(--canvas-drift-y)));
+  }
+  to {
+    transform: translate(var(--canvas-drift-x), var(--canvas-drift-y));
+  }
+}
+
+@container dashboard (min-width: 2600px) {
+  .domain-columns {
+    gap: var(--space-4);
+  }
+
+  .domain-section {
+    padding-block: var(--space-4);
+  }
+
+  .domain-column-header span,
+  .domain-section-header h3,
+  .domain-inline-label > span:first-child,
+  .domain-list-row strong,
+  .domain-status-row strong,
+  .domain-habit-row strong,
+  .domain-provider-value strong,
+  .domain-provider-value small,
+  .domain-feature-row strong,
+  .domain-habit-days i {
+    font-size: 1.7rem;
+  }
+}
+
+@media (max-aspect-ratio: 4 / 3) {
+  main.dashboard {
+    aspect-ratio: auto;
+    max-height: none;
+    min-height: 100svh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pixel-shift-1 .domain-columns,
+  .pixel-shift-2 .domain-columns,
+  .pixel-shift-3 .domain-columns {
+    animation: none;
+  }
+}
