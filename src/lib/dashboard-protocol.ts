@@ -10,6 +10,20 @@ export const STREAM_RETRY_MS = 5000;
 export const STREAM_HEARTBEAT_MS = 15000;
 export const HISTORY_LIMIT = 18;
 
+/**
+ * Sequence numbers are wall-clock seeded, so `seq` never goes backwards for a
+ * client across a server restart: `max(previous + 1, now)`. A client that keeps
+ * its `lastSeq` across a reconnect (or an in-process reconnect) therefore never
+ * silently drops a newer snapshot, even when the restarted server had nothing
+ * persisted to restore.
+ */
+export function monotonicSeq(
+  previous: number,
+  nowMs: number = Date.now(),
+): number {
+  return Math.max(previous + 1, nowMs);
+}
+
 export type SystemSample = {
   cpu: number | null;
   memory: number | null;

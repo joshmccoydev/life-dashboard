@@ -5,9 +5,17 @@ import {
   STREAM_HEARTBEAT_MS,
   type DashboardSnapshotEvent,
 } from "@/lib/dashboard-protocol";
+import { log } from "@/lib/log";
 
 /** Home-LAN cap; the 17th concurrent stream is refused with 503. */
 export const MAX_STREAM_CLIENTS = 16;
+
+/**
+ * Per-client backpressure cap. A client that does not read (a half-open TCP
+ * connection) would otherwise grow the server's queue without bound; once its
+ * unread queue reaches this many bytes it is dropped and its slot released.
+ */
+export const MAX_QUEUED_BYTES = 512 * 1024;
 
 export type SnapshotSource = {
   latest(): DashboardSnapshotEvent | null;
@@ -47,8 +55,10 @@ export function releaseStreamClient(): void {
 /**
  * Encode the SSE response body: `retry:` then the initial snapshot (unless the
  * client already has that `seq`), then one `snapshot` event per new `seq`, plus
- * a `: hb` comment every `heartbeatMs`. Cleanup runs on request abort, stream
- * cancel and write failure so no subscriber or timer is leaked.
+ * a heartbeat frame every `heartbeatMs` (`: hb` comment plus a named
+ * `heartbeat` event so the client watchdog resets). Cleanup runs on request
+ * abort, stream cancel, write failure and an unread client that exceeds
+ * `MAX_QUEUED_BYTES`, so no subscriber, slot or timer is leaked.
  */
 export function createSseStream(
   options: SseStreamOptions,
@@ -80,35 +90,49 @@ export function createSseStream(
     }
   };
 
-  return new ReadableStream<Uint8Array>({
-    start(controller) {
-      controllerRef = controller;
-      const write = (text: string) => {
-        if (cleaned) return;
-        try {
-          controller.enqueue(encoder.encode(text));
-        } catch {
-          cleanup(false);
-        }
-      };
-      write(encodeSseRetry());
-      const initial = options.initialSnapshot;
-      const lastEventId = options.lastEventId ?? null;
-      if (initial && !(lastEventId !== null && lastEventId === initial.seq))
-        write(encodeSseEvent(initial));
-      if (options.source)
-        unsubscribe = options.source.subscribe((event) =>
-          write(encodeSseEvent(event)),
-        );
-      heartbeat = setInterval(() => write(encodeSseHeartbeat()), heartbeatMs);
-      (heartbeat as unknown as { unref?: () => void }).unref?.();
-      options.signal.addEventListener("abort", () => cleanup(true), {
-        once: true,
-      });
-      if (options.signal.aborted) cleanup(true);
+  return new ReadableStream<Uint8Array>(
+    {
+      start(controller) {
+        controllerRef = controller;
+        const write = (text: string) => {
+          if (cleaned) return;
+          const bytes = encoder.encode(text);
+          if (
+            controller.desiredSize !== null &&
+            bytes.byteLength > controller.desiredSize
+          ) {
+            // The client stopped reading: drop it instead of buffering forever.
+            log("sse_client_slow", { capBytes: MAX_QUEUED_BYTES });
+            cleanup(true);
+            return;
+          }
+          try {
+            controller.enqueue(bytes);
+          } catch {
+            cleanup(false);
+          }
+        };
+        write(encodeSseRetry());
+        const initial = options.initialSnapshot;
+        const lastEventId = options.lastEventId ?? null;
+        if (initial && !(lastEventId !== null && lastEventId === initial.seq))
+          write(encodeSseEvent(initial));
+        if (options.source)
+          unsubscribe = options.source.subscribe((event) =>
+            write(encodeSseEvent(event)),
+          );
+        heartbeat = setInterval(() => write(encodeSseHeartbeat()), heartbeatMs);
+        (heartbeat as unknown as { unref?: () => void }).unref?.();
+        options.signal.addEventListener("abort", () => cleanup(true), {
+          once: true,
+        });
+        if (options.signal.aborted) cleanup(true);
+      },
+      cancel() {
+        cleanup(false);
+      },
     },
-    cancel() {
-      cleanup(false);
-    },
-  });
+    // Count queued bytes, not chunks, so the cap is a real memory bound.
+    new ByteLengthQueuingStrategy({ highWaterMark: MAX_QUEUED_BYTES }),
+  );
 }

@@ -1,4 +1,5 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { DashboardData, DataState, Domain } from "@/domains/models";
 import { log } from "@/lib/log";
@@ -146,8 +147,9 @@ export async function saveSnapshot(
   try {
     await mkdir(dir, { recursive: true });
     const file = path.join(dir, SNAPSHOT_FILE);
+    const temporary = `${file}.${randomUUID()}.tmp`;
     await writeFile(
-      `${file}.tmp`,
+      temporary,
       JSON.stringify({
         version: SNAPSHOT_VERSION,
         serverTime: snapshot.serverTime,
@@ -155,8 +157,9 @@ export async function saveSnapshot(
         history: { systems: (snapshot.history ?? []).slice(-HISTORY_LIMIT) },
         data,
       }),
+      { mode: 0o600 },
     );
-    await rename(`${file}.tmp`, file);
+    await rename(temporary, file);
   } catch (error) {
     log("snapshot_write_failed", {
       message: error instanceof Error ? error.message : "unknown error",

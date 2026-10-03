@@ -1,6 +1,13 @@
 import test, { after, before } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type {
@@ -150,6 +157,16 @@ test("missing, empty, truncated and wrong-version files return null", async (t) 
   assert.equal(await loadSnapshot(dir), null);
   await writeFile(file, JSON.stringify({ version: 2, data: {} }));
   assert.equal(await loadSnapshot(dir), null);
+  // A wrong version must be rejected even when its payload looks valid.
+  await writeFile(
+    file,
+    JSON.stringify({
+      version: 2,
+      serverTime: FIXED,
+      data: { weather: state({ domain: "weather" }) },
+    }),
+  );
+  assert.equal(await loadSnapshot(dir), null);
   await writeFile(file, JSON.stringify({ version: 1, data: {} }));
   assert.equal(await loadSnapshot(dir), null);
 });
@@ -160,6 +177,29 @@ test("atomic write leaves no .tmp file behind", async (t) => {
   await saveSnapshot(dir, { data: dashboard(), serverTime: FIXED });
   const files = await readdir(dir);
   assert.deepEqual(files, ["snapshot.json"]);
+});
+
+test("snapshot.json is swapped in place (atomic tmp+rename, not truncate-write)", async (t) => {
+  const dir = await tempDir();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const file = path.join(dir, "snapshot.json");
+  await saveSnapshot(dir, {
+    data: dashboard(),
+    serverTime: FIXED,
+    seq: 1,
+  });
+  const first = await stat(file);
+  await saveSnapshot(dir, {
+    data: dashboard({ weather: state({ domain: "weather", n: 2 }) }),
+    serverTime: FIXED,
+    seq: 2,
+  });
+  const second = await stat(file);
+  // A rename swaps a freshly written file into place, so the inode changes. A
+  // direct truncate-write would keep the same inode.
+  assert.notEqual(first.ino, second.ino);
+  assert.deepEqual(await readdir(dir), ["snapshot.json"]);
+  assert.equal((await stat(file)).mode & 0o777, 0o600);
 });
 
 test("restart seeds the next snapshot with stale-flagged values", async (t) => {
@@ -197,7 +237,7 @@ test("restart seeds the next snapshot with stale-flagged values", async (t) => {
   assert.ok(snapshot);
   assert.deepEqual(snapshot.data.calendar.data, { domain: "calendar" });
   assert.equal(snapshot.data.calendar.status, "stale");
-  assert.equal(snapshot.seq, 9);
+  assert.ok(snapshot.seq > 8, `seq did not advance past the persisted 8`);
   assert.deepEqual(snapshot.history.systems, [
     { cpu: 11, memory: 22, disk: 33 },
   ]);

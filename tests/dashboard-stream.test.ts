@@ -158,6 +158,22 @@ test("invalid payloads are dropped and reported without closing the stream", () 
   stream.close();
 });
 
+test("a wrong protocol version is dropped and reported on the first frame", () => {
+  const seen: DashboardSnapshotEvent[] = [];
+  const errors: unknown[] = [];
+  const stream = open({
+    onSnapshot: (event: DashboardSnapshotEvent) => seen.push(event),
+    onError: (error: unknown) => errors.push(error),
+  });
+  const source = FakeEventSource.instances[0];
+  source.emit("snapshot", JSON.stringify({ ...snapshotEvent(99), v: 2 }));
+  assert.equal(seen.length, 0);
+  assert.equal(errors.length, 1);
+  assert.match(String(errors[0]), /protocol version/i);
+  assert.equal(source.closed, false);
+  stream.close();
+});
+
 test("watchdog marks stale and recreates the source", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const statuses: string[] = [];
@@ -204,5 +220,21 @@ test("close() removes timers and listeners", (t) => {
     assert.equal(FakeEventSource.instances.length, 1);
   } finally {
     t.mock.timers.reset();
+  }
+});
+
+test("close() clears the watchdog timer", () => {
+  const original = globalThis.clearTimeout;
+  let cleared = 0;
+  globalThis.clearTimeout = ((handle?: unknown) => {
+    cleared += 1;
+    return original(handle as never);
+  }) as typeof clearTimeout;
+  try {
+    const stream = open({ watchdogMs: 60_000 });
+    stream.close();
+    assert.ok(cleared >= 1, "close() left the watchdog timer armed");
+  } finally {
+    globalThis.clearTimeout = original;
   }
 });
