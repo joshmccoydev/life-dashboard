@@ -144,10 +144,12 @@ test("null feeds render 'No data' and empty-but-present lists keep their copy", 
     },
   );
   const nullHtml = renderFixture(nullData, "day");
+  const nullText = text(nullHtml);
   assert.ok(nullHtml.includes('class="domain-empty">No data</div>'));
-  assert.ok(!nullHtml.includes("No upcoming payments"));
-  assert.ok(!nullHtml.includes("No work events ahead"));
-  assert.ok(!nullHtml.includes("No habits in the Habits list"));
+  assert.ok(!nullText.includes("No upcoming payments"));
+  assert.ok(!nullText.includes("No work events ahead"));
+  assert.ok(!nullText.includes("No personal events ahead"));
+  assert.ok(!nullText.includes("No habits in the Habits list"));
 
   const emptyData = structuredClone(fixture.data);
   emptyData.calendar.data = { events: [] };
