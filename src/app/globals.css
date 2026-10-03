@@ -297,6 +297,70 @@ svg {
   border-top: 1px solid var(--color-border);
 }
 
+@media (max-height: 800px) and (min-width: 1101px) {
+  .dashboard .domain-column-header {
+    padding: var(--space-1) var(--space-2);
+  }
+
+  .dashboard .domain-section {
+    padding-block: var(--space-1);
+  }
+
+  .domain-section-header {
+    margin-bottom: 0.1rem;
+  }
+
+  .personal-column .domain-column-content {
+    grid-template-rows:
+      minmax(104px, 1fr)
+      minmax(126px, 1.1fr)
+      minmax(86px, 0.7fr)
+      minmax(96px, 1fr);
+  }
+
+  .personal-column .domain-schedule .domain-event-list,
+  .personal-column .domain-habits > .domain-section-summary {
+    display: none;
+  }
+
+  .work-column .domain-column-content {
+    grid-template-rows:
+      minmax(130px, auto)
+      minmax(100px, 0.8fr)
+      minmax(145px, 1fr);
+  }
+
+  .work-column .domain-grow .domain-feature-row {
+    display: none;
+  }
+
+  .digital-column .system-sparkline {
+    display: none;
+  }
+
+  .digital-column .system-metrics {
+    margin-top: var(--space-1);
+    padding-top: var(--space-1);
+  }
+
+  .digital-column .domain-provider-list > .domain-list-row:nth-child(n + 4) {
+    display: none;
+  }
+
+  .digital-column .domain-provider-list .domain-list-row > span {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .domain-section.domain-schedule .domain-event-list > .domain-list-row:nth-child(n + 2),
+  .personal-column .domain-habit-days,
+  .work-column .domain-section.domain-projects .domain-project:nth-child(n + 2) {
+    display: none;
+  }
+}
+
 .domain-column-content > .domain-section:first-child {
   border-top: 0;
 }
@@ -907,6 +971,13 @@ svg {
 .pixel-shift-3 .header,
 .pixel-shift-3 .domain-columns {
   transform: translate(0, -1px);
+}
+
+@media (max-height: 800px) and (min-width: 1101px) {
+  .dashboard .personal-column .domain-column-content > .domain-section:last-child .domain-progress-list,
+  .dashboard .work-column .domain-section.domain-projects .domain-project-list {
+    gap: var(--space-1);
+  }
 }
 
 @media (max-width: 1100px) {

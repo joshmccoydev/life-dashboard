@@ -1,0 +1,493 @@
+{
+  "_note": "Synthetic fixture derived from getDemoDashboard() with every feed flipped to source:real / status:ready. Finance payload removed. Used by the SSR parity goldens and component tests.",
+  "serverTime": "2026-10-03T04:08:46.146Z",
+  "data": {
+    "weather": {
+      "loading": false,
+      "data": {
+        "temperature": 74,
+        "feelsLike": 73,
+        "condition": "Partly cloudy",
+        "code": 2,
+        "unit": "F",
+        "high": 78,
+        "low": 61,
+        "location": "Chicago",
+        "isDay": true
+      },
+      "source": "real",
+      "provider": "Demo weather",
+      "status": "ready",
+      "lastSuccess": "2026-10-03T04:08:46.146Z",
+      "lastAttempt": "2026-10-03T04:08:46.146Z",
+      "error": null,
+      "refreshMs": 900000
+    },
+    "calendar": {
+      "loading": false,
+      "data": {
+        "events": [
+          {
+            "id": "standup",
+            "title": "Team stand-up",
+            "start": "2026-10-02T14:30:00.000Z",
+            "end": "2026-10-02T14:45:00.000Z",
+            "calendar": "work",
+            "location": "Teams"
+          },
+          {
+            "id": "focus",
+            "title": "Build \u00b7 focused time",
+            "start": "2026-10-02T18:00:00.000Z",
+            "end": "2026-10-02T19:30:00.000Z",
+            "calendar": "personal"
+          },
+          {
+            "id": "review",
+            "title": "Project sync",
+            "start": "2026-10-02T21:00:00.000Z",
+            "end": "2026-10-02T21:30:00.000Z",
+            "calendar": "work",
+            "location": "Teams"
+          },
+          {
+            "id": "run",
+            "title": "Evening run",
+            "start": "2026-10-02T23:00:00.000Z",
+            "end": "2026-10-02T23:45:00.000Z",
+            "calendar": "personal"
+          },
+          {
+            "id": "tomorrow",
+            "title": "Product review",
+            "start": "2026-10-03T15:00:00.000Z",
+            "end": "2026-10-03T16:00:00.000Z",
+            "calendar": "work",
+            "location": "Teams"
+          },
+          {
+            "id": "coffee",
+            "title": "Coffee with Alex",
+            "start": "2026-10-03T17:30:00.000Z",
+            "end": "2026-10-03T18:30:00.000Z",
+            "calendar": "personal"
+          },
+          {
+            "id": "weekend",
+            "title": "Trail run",
+            "start": "2026-10-05T13:00:00.000Z",
+            "end": "2026-10-05T14:00:00.000Z",
+            "calendar": "personal"
+          }
+        ]
+      },
+      "source": "real",
+      "provider": "Demo calendar",
+      "status": "ready",
+      "lastSuccess": "2026-10-03T04:08:46.146Z",
+      "lastAttempt": "2026-10-03T04:08:46.146Z",
+      "error": null,
+      "refreshMs": 30000
+    },
+    "reminders": {
+      "loading": false,
+      "data": {
+        "items": [
+          {
+            "id": "groceries",
+            "title": "Pick up groceries",
+            "due": "2026-10-03T02:00:00.000Z",
+            "completed": false,
+            "listName": "Reminders"
+          },
+          {
+            "id": "insurance",
+            "title": "Review insurance renewal",
+            "due": "2026-10-01T22:00:00.000Z",
+            "completed": false,
+            "listName": "Reminders"
+          },
+          {
+            "id": "internet-bill",
+            "title": "Internet bill",
+            "due": "2026-10-05T14:00:00.000Z",
+            "completed": false,
+            "listName": "Payments"
+          },
+          {
+            "id": "credit-card",
+            "title": "Credit card payment",
+            "due": "2026-10-10T14:00:00.000Z",
+            "completed": false,
+            "listName": "Payments"
+          }
+        ]
+      },
+      "source": "real",
+      "provider": "Demo reminders",
+      "status": "ready",
+      "lastSuccess": "2026-10-03T04:08:46.146Z",
+      "lastAttempt": "2026-10-03T04:08:46.146Z",
+      "error": null,
+      "refreshMs": 120000
+    },
+    "habits": {
+      "loading": false,
+      "data": {
+        "date": "2026-10-02",
+        "habits": [
+          {
+            "id": "vitamins",
+            "title": "Vitamins",
+            "trackingMethod": "reminder",
+            "sourceId": "vitamins",
+            "occurrences": [
+              {
+                "date": "2026-09-28",
+                "completed": true,
+                "completedAt": "2026-09-29T01:00:00.000Z"
+              },
+              {
+                "date": "2026-09-29",
+                "completed": true,
+                "completedAt": "2026-09-30T01:00:00.000Z"
+              },
+              {
+                "date": "2026-09-30",
+                "completed": true,
+                "completedAt": "2026-10-01T01:00:00.000Z"
+              },
+              {
+                "date": "2026-10-01",
+                "completed": true,
+                "completedAt": "2026-10-02T01:00:00.000Z"
+              },
+              {
+                "date": "2026-10-02",
+                "completed": true,
+                "completedAt": "2026-10-03T01:00:00.000Z"
+              },
+              {
+                "date": "2026-10-03",
+                "completed": true,
+                "completedAt": "2026-10-04T01:00:00.000Z"
+              },
+              {
+                "date": "2026-10-04",
+                "completed": false,
+                "completedAt": null
+              }
+            ]
+          },
+          {
+            "id": "read",
+            "title": "Read 30 minutes",
+            "trackingMethod": "reminder",
+            "sourceId": "read",
+            "occurrences": [
+              {
+                "date": "2026-09-28",
+                "completed": true,
+                "completedAt": "2026-09-29T01:00:00.000Z"
+              },
+              {
+                "date": "2026-09-29",
+                "completed": true,
+                "completedAt": "2026-09-30T01:00:00.000Z"
+              },
+              {
+                "date": "2026-09-30",
+                "completed": false,
+                "completedAt": null
+              },
+              {
+                "date": "2026-10-01",
+                "completed": true,
+                "completedAt": "2026-10-02T01:00:00.000Z"
+              },
+              {
+                "date": "2026-10-02",
+                "completed": true,
+                "completedAt": "2026-10-03T01:00:00.000Z"
+              },
+              {
+                "date": "2026-10-03",
+                "completed": true,
+                "completedAt": "2026-10-04T01:00:00.000Z"
+              },
+              {
+                "date": "2026-10-04",
+                "completed": false,
+                "completedAt": null
+              }
+            ]
+          },
+          {
+            "id": "exercise",
+            "title": "Exercise",
+            "trackingMethod": "reminder",
+            "sourceId": "exercise",
+            "occurrences": [
+              {
+                "date": "2026-09-28",
+                "completed": true,
+                "completedAt": "2026-09-29T01:00:00.000Z"
+              },
+              {
+                "date": "2026-09-29",
+                "completed": false,
+                "completedAt": null
+              },
+              {
+                "date": "2026-09-30",
+                "completed": true,
+                "completedAt": "2026-10-01T01:00:00.000Z"
+              },
+              {
+                "date": "2026-10-01",
+                "completed": false,
+                "completedAt": null
+              },
+              {
+                "date": "2026-10-02",
+                "completed": true,
+                "completedAt": "2026-10-03T01:00:00.000Z"
+              },
+              {
+                "date": "2026-10-03",
+                "completed": false,
+                "completedAt": null
+              },
+              {
+                "date": "2026-10-04",
+                "completed": false,
+                "completedAt": null
+              }
+            ]
+          }
+        ]
+      },
+      "source": "real",
+      "provider": "Demo habits",
+      "status": "ready",
+      "lastSuccess": "2026-10-03T04:08:46.146Z",
+      "lastAttempt": "2026-10-03T04:08:46.146Z",
+      "error": null,
+      "refreshMs": 120000
+    },
+    "finance": {
+      "loading": false,
+      "data": null,
+      "source": "real",
+      "provider": "Local demo finance",
+      "status": "ready",
+      "lastSuccess": "2026-10-03T04:08:46.146Z",
+      "lastAttempt": "2026-10-03T04:08:46.146Z",
+      "error": null,
+      "refreshMs": 1800000
+    },
+    "health": {
+      "loading": false,
+      "data": {
+        "steps": 8421,
+        "stepGoal": 10000,
+        "sleepMinutes": 452,
+        "activityPercent": 73,
+        "exerciseMinutes": 38,
+        "exerciseGoal": 30,
+        "standHours": 10,
+        "standGoal": 12,
+        "workout": "Outdoor run \u00b7 32 min"
+      },
+      "source": "real",
+      "provider": "Demo Apple Health",
+      "status": "ready",
+      "lastSuccess": "2026-10-03T04:08:46.146Z",
+      "lastAttempt": "2026-10-03T04:08:46.146Z",
+      "error": null,
+      "refreshMs": 600000
+    },
+    "build": {
+      "loading": false,
+      "data": {
+        "username": "demo",
+        "commitsToday": 12,
+        "activeRepos": 3,
+        "openPRs": 1,
+        "lastActivity": "2026-10-03T04:00:46.146Z",
+        "repositories": [
+          {
+            "name": "lifedash",
+            "commits": 7
+          },
+          {
+            "name": "homelab",
+            "commits": 3
+          },
+          {
+            "name": "personal-site",
+            "commits": 2
+          }
+        ]
+      },
+      "source": "real",
+      "provider": "Demo GitHub",
+      "status": "ready",
+      "lastSuccess": "2026-10-03T04:08:46.146Z",
+      "lastAttempt": "2026-10-03T04:08:46.146Z",
+      "error": null,
+      "refreshMs": 180000
+    },
+    "ai": {
+      "loading": false,
+      "data": {
+        "providers": [
+          {
+            "name": "Codex 5h",
+            "status": "idle",
+            "remainingPercent": 64,
+            "resetAt": "2026-10-03T06:08:46.146Z",
+            "requestsToday": 86,
+            "tokensToday": 1800000,
+            "costToday": null,
+            "jobsCompleted": 24,
+            "errors": 0
+          },
+          {
+            "name": "Codex weekly",
+            "status": "idle",
+            "remainingPercent": 91,
+            "resetAt": "2026-10-09T04:08:46.146Z",
+            "requestsToday": null,
+            "tokensToday": null,
+            "costToday": null,
+            "jobsCompleted": null,
+            "errors": null
+          },
+          {
+            "name": "Codex resets",
+            "status": "idle",
+            "remainingPercent": null,
+            "value": "2 available",
+            "availableCount": 2,
+            "expiresAt": "2026-10-21T04:08:46.146Z",
+            "requestsToday": null,
+            "tokensToday": null,
+            "costToday": null,
+            "jobsCompleted": null,
+            "errors": null
+          },
+          {
+            "name": "Cursor monthly",
+            "status": "idle",
+            "remainingPercent": 82,
+            "requestsToday": 32,
+            "tokensToday": 1000000,
+            "costToday": null,
+            "jobsCompleted": 13,
+            "errors": 0
+          },
+          {
+            "name": "Grok Bot weekly",
+            "status": "idle",
+            "remainingPercent": 73,
+            "requestsToday": null,
+            "tokensToday": null,
+            "costToday": null,
+            "jobsCompleted": null,
+            "errors": null
+          }
+        ]
+      },
+      "source": "real",
+      "provider": "Demo AI telemetry",
+      "status": "ready",
+      "lastSuccess": "2026-10-03T04:08:46.146Z",
+      "lastAttempt": "2026-10-03T04:08:46.146Z",
+      "error": null,
+      "refreshMs": 180000
+    },
+    "systems": {
+      "loading": false,
+      "data": {
+        "machine": {
+          "id": "machine",
+          "name": "Mac",
+          "status": "online",
+          "latencyMs": null,
+          "uptimeSeconds": 345600,
+          "cpuPercent": 14,
+          "memoryPercent": 42,
+          "diskPercent": 38
+        },
+        "endpoints": [
+          {
+            "id": "internet",
+            "name": "Internet / API",
+            "status": "online",
+            "latencyMs": 14,
+            "uptimeSeconds": null,
+            "cpuPercent": null,
+            "memoryPercent": null,
+            "diskPercent": null
+          },
+          {
+            "id": "vps",
+            "name": "VPS",
+            "status": "online",
+            "latencyMs": 24,
+            "uptimeSeconds": 2678400,
+            "cpuPercent": 8,
+            "memoryPercent": 32,
+            "diskPercent": 61
+          }
+        ]
+      },
+      "source": "real",
+      "provider": "Demo infrastructure",
+      "status": "ready",
+      "lastSuccess": "2026-10-03T04:08:46.146Z",
+      "lastAttempt": "2026-10-03T04:08:46.146Z",
+      "error": null,
+      "refreshMs": 45000
+    },
+    "goals": {
+      "loading": false,
+      "data": {
+        "goals": [
+          {
+            "title": "Run 100 miles",
+            "current": 68,
+            "target": 100,
+            "unit": "mi"
+          },
+          {
+            "title": "Read 24 books",
+            "current": 17,
+            "target": 24,
+            "unit": "books"
+          }
+        ],
+        "projects": [
+          {
+            "name": "LifeDash",
+            "detail": "A quieter view of everything that matters",
+            "progress": 72
+          },
+          {
+            "name": "Homelab refresh",
+            "detail": "Backups, monitoring & a little less maintenance",
+            "progress": 45
+          }
+        ]
+      },
+      "source": "real",
+      "provider": "Local demo goals",
+      "status": "ready",
+      "lastSuccess": "2026-10-03T04:08:46.146Z",
+      "lastAttempt": "2026-10-03T04:08:46.146Z",
+      "error": null,
+      "refreshMs": 600000
+    }
+  }
+}
