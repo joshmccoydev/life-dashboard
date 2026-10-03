@@ -1,7 +1,12 @@
 export type SourceMode = "real" | "mock";
 export type DataState<T> = {
   loading: boolean;
-  data: T;
+  /**
+   * Null when a live adapter failed and there is no prior reading to keep.
+   * Consumers must render an explicit "no data" state instead of substituting
+   * mock/demo values.
+   */
+  data: T | null;
   source: SourceMode;
   provider: string;
   status: "ready" | "stale" | "error";

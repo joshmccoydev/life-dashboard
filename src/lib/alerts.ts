@@ -15,13 +15,22 @@ export function evaluateAlerts(
   const time = now.getTime();
   const systems = data.systems.data;
   for (const s of includeDemo || data.systems.source === "real"
-    ? [systems.machine, ...systems.endpoints]
+    ? systems
+      ? [systems.machine, ...systems.endpoints]
+      : []
     : []) {
     if (s.status === "offline")
       alerts.push({
         id: `offline-${s.id}`,
         level: "critical",
         message: `${s.name} is offline`,
+      });
+    // Some probes failing while others answer is degraded, not an outage.
+    else if (s.status === "unknown")
+      alerts.push({
+        id: `degraded-${s.id}`,
+        level: "warning",
+        message: `${s.name} degraded`,
       });
     if (s.diskPercent !== null && s.diskPercent > 90)
       alerts.push({
@@ -30,7 +39,7 @@ export function evaluateAlerts(
         message: `${s.name} disk ${Math.round(s.diskPercent)}% full`,
       });
   }
-  const overdue = data.reminders.data.items.filter(
+  const overdue = (data.reminders.data?.items ?? []).filter(
     (r) => !r.completed && r.due !== null && Date.parse(r.due) < time,
   );
   if (overdue.length && (includeDemo || data.reminders.source === "real"))
@@ -39,7 +48,7 @@ export function evaluateAlerts(
       level: "warning",
       message: `${overdue.length} overdue ${overdue.length === 1 ? "reminder" : "reminders"}${data.reminders.source === "mock" ? " · demo" : ""}`,
     });
-  const meeting = data.calendar.data.events.find(
+  const meeting = (data.calendar.data?.events ?? []).find(
     (e) =>
       !e.allDay &&
       Date.parse(e.start) >= time &&
@@ -52,7 +61,7 @@ export function evaluateAlerts(
       message: `${meeting.title} in ${Math.ceil((Date.parse(meeting.start) - time) / 60000)} min${data.calendar.source === "mock" ? " · demo" : ""}`,
     });
   for (const bill of includeDemo || data.finance.source === "real"
-    ? data.finance.data.bills
+    ? data.finance.data?.bills ?? []
     : []) {
     const delta = Date.parse(bill.due) - time;
     if (delta >= 0 && delta < 48 * 3600000)
