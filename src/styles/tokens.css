@@ -1,0 +1,239 @@
+/* LifeDash display system: calibrated for a 16:9 screen viewed at a distance. */
+:root {
+  color-scheme: dark;
+
+  /* Day palette: calm blue-green on OLED black, with state colors reserved for state. */
+  --color-canvas: #080b0d;
+  --color-surface: #0c1013;
+  --color-surface-raised: #11171b;
+  --color-surface-emphasis: #151e22;
+  --color-text: #f2f5f3;
+  --color-text-secondary: #bec9c8;
+  --color-text-muted: #8e9d9d;
+  --color-border: #263235;
+  --color-border-strong: #344448;
+  --color-accent: #8fc9be;
+  --color-accent-soft: #203631;
+  --color-state-good: #8fc5a2;
+  --color-state-caution: #e0b776;
+  --color-state-critical: #df8984;
+
+  /* Keep legacy selectors on the same palette while the stylesheet is migrated. */
+  --bg: var(--color-canvas);
+  --panel: var(--color-surface);
+  --text: var(--color-text);
+  --secondary: var(--color-text-secondary);
+  --muted: var(--color-text-muted);
+  --line: var(--color-border);
+  --blue: var(--color-accent);
+  --green: var(--color-state-good);
+  --amber: var(--color-state-caution);
+  --red: var(--color-state-critical);
+
+  --font-ui: var(--font-display), "Avenir Next", "Segoe UI", sans-serif;
+  --font-mono: "SFMono-Regular", "Cascadia Code", "Liberation Mono", monospace;
+  /* Every tier keeps a >=20px floor at 1920x1080 and scales with viewport
+     width, so the 4K layout is exactly 2x the 1080p layout. */
+  --type-tier-1: clamp(3rem, 3.6vw, 6rem);
+  --type-tier-2: clamp(1.6rem, 1.8vw, 2.6rem);
+  --type-tier-3: clamp(1.4rem, 1.5vw, 2.2rem);
+  --type-detail: clamp(1rem, 1.2vw, 1.7rem);
+  --type-micro: clamp(1rem, 1.05vw, 1.5rem);
+
+  --overscan-inline: 3.25%;
+  --overscan-block: 1.4%;
+  --space-1: clamp(0.2rem, 0.25vw, 0.5rem);
+  --space-2: clamp(0.4rem, 0.5vw, 0.9rem);
+  --space-3: clamp(0.6rem, 0.7vw, 1.2rem);
+  --space-4: clamp(0.9rem, 1vw, 1.7rem);
+  --space-5: clamp(1.3rem, 1.5vw, 2.4rem);
+  --space-6: clamp(1.8rem, 2.2vw, 3.4rem);
+
+  --auto-dim-idle: 0.72;
+  --auto-dim-night: 0.62;
+  --display-luminance-day: 1;
+  --display-luminance-night: 0.35;
+
+  font-family: var(--font-ui);
+  font-synthesis: none;
+  font-size: clamp(20px, 1.05vw, 42px);
+  font-variant-numeric: tabular-nums lining-nums;
+  background: var(--color-canvas);
+  color: var(--color-text);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+  }
+}
+
+main.dashboard {
+  container: dashboard / inline-size;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  width: 100%;
+  /* 16:9 canvas that is always bounded by the viewport height. */
+  max-width: calc(100svh * 16 / 9);
+  height: 100svh;
+  margin-inline: auto;
+  padding: var(--overscan-block) var(--overscan-inline);
+  overflow: hidden;
+  background: var(--color-canvas);
+}
+
+.domain-columns {
+  gap: var(--space-3);
+}
+
+.domain-column {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  border-radius: 0.75rem;
+}
+
+.domain-column-header {
+  min-height: 0;
+  padding: var(--space-2) var(--space-3);
+}
+
+.domain-column-header > svg,
+.domain-column-header h2 {
+  color: var(--color-accent);
+}
+
+.domain-column-header h2 {
+  font-size: var(--type-tier-3);
+  letter-spacing: -0.025em;
+}
+
+.domain-column-header span,
+.domain-section-header h3,
+.domain-inline-label > span:first-child {
+  font-size: var(--type-micro);
+  letter-spacing: 0.035em;
+}
+
+.domain-section {
+  padding: var(--space-2) var(--space-3);
+}
+
+.domain-next-event > strong {
+  color: var(--color-text);
+  font-size: var(--type-tier-2);
+}
+
+.domain-next-event > strong small {
+  font-size: var(--type-micro);
+}
+
+.domain-next-event h4 {
+  color: var(--color-text);
+  font-size: var(--type-tier-3);
+}
+
+.domain-next-event span,
+.domain-list-row,
+.domain-status-row,
+.domain-habit-row,
+.domain-empty,
+.domain-section-summary,
+.domain-project-detail,
+.domain-project .domain-list-row > span,
+.domain-project p,
+.domain-feature-row {
+  font-size: var(--type-detail);
+}
+
+.domain-list-row strong,
+.domain-status-row strong,
+.domain-habit-row strong,
+.domain-provider-value strong,
+.domain-provider-value small,
+.domain-feature-row strong {
+  font-size: var(--type-micro);
+}
+
+.domain-habit-days > div {
+  grid-template-columns: repeat(7, 1.05em);
+  gap: 0.3em;
+}
+
+.domain-habit-days i {
+  font-size: var(--type-micro);
+}
+
+.domain-habit-row .habit-week i {
+  width: 0.58rem;
+  height: 0.58rem;
+}
+
+.domain-metrics strong {
+  color: var(--color-text);
+  font-size: var(--type-tier-3);
+}
+
+.domain-metrics.compact strong {
+  font-size: var(--type-tier-3);
+}
+
+.domain-metrics span {
+  font-size: var(--type-micro);
+}
+
+.domain-project {
+  border-color: var(--color-border);
+}
+
+.domain-provider-list .domain-list-row,
+.domain-status-list .domain-status-row {
+  border-color: var(--color-border);
+}
+
+.domain-home .domain-list-row strong {
+  color: var(--color-text-secondary);
+}
+
+.mode-morning .personal-column,
+.mode-evening .personal-column,
+.mode-day .work-column {
+  border-color: var(--color-accent);
+}
+
+.mode-night {
+  --color-canvas: #050607;
+  --color-surface: #080a0b;
+  --color-surface-raised: #0b0e10;
+  --color-surface-emphasis: #101416;
+  --color-text: #c2c9c8;
+  --color-text-secondary: #a1acab;
+  --color-text-muted: #858f8e;
+  --color-border: #1d2425;
+  --color-border-strong: #283132;
+  --color-accent: #789b94;
+  --color-accent-soft: #192421;
+  --color-state-good: #78977f;
+  --color-state-caution: #a58a61;
+  --color-state-critical: #a46d69;
+  --bg: var(--color-canvas);
+  --panel: var(--color-surface);
+  --text: var(--color-text);
+  --secondary: var(--color-text-secondary);
+  --muted: var(--color-text-muted);
+  --line: var(--color-border);
+  --blue: var(--color-accent);
+  --green: var(--color-state-good);
+  --amber: var(--color-state-caution);
+  --red: var(--color-state-critical);
+  filter: brightness(var(--display-luminance-night));
+}
+
+@media (max-aspect-ratio: 4 / 3) {
+  main.dashboard {
+    max-width: none;
+    height: auto;
+    min-height: 100svh;
+    overflow: visible;
+  }
+}
