@@ -71,6 +71,16 @@ npm start
 
 Open **http://localhost:3000** on a browser attached to the TV. On another device on your trusted LAN, use `http://<LifeDash-host-LAN-IP>:3000`. Scripts bind to `0.0.0.0`. The local V1 has no login; keep it on your trusted LAN. Before exposing it beyond your LAN, put authenticated access in front of it. No bank accounts or sensitive medical records are connected.
 
+## Collector and live updates
+
+The server runs a single background collector that polls every domain's cache on its own timer, whether or not a browser is open. Each tick calls the existing per-domain cache, so the refresh intervals and the no-mock live rules are unchanged. Every tick produces one snapshot: the ten-domain `DashboardData`, a server timestamp, a `seq` that increases only when the serialized data changes, and a short ring of the last 18 system samples (CPU, memory, disk). A failing domain is logged and keeps its previous value; a hung adapter cannot block the others.
+
+Snapshots and the 18-sample systems history persist to `.lifedash/snapshot.json` (git-ignored, written atomically). Only real readings with a known success are stored: mock, demo and `data: null` states are never written. On restart the collector restores the sequence and history, seeds those last-known values, and re-marks them stale until a fresh reading arrives.
+
+Open displays follow `GET /api/dashboard/stream`, a Server-Sent Events feed (`text/event-stream`) that sends a `retry: 5000` hint, the current snapshot immediately, one `snapshot` event per new `seq`, and a `: hb` comment every 15 seconds. Clients reconnect with `Last-Event-ID` and a duplicate `seq` is ignored; at most 16 stream clients are served at once. `?demo=true` streams demo data and never starts or reads the collector.
+
+With the collector running, page loads and `GET /api/dashboard` return the collector's latest snapshot instead of triggering fetches. Set `LIFEDASH_COLLECTOR=off` to turn the background collector off and restore the previous on-demand refresh behavior; `LIFEDASH_COLLECTOR_TICK_SECONDS` sets the tick (default 5, valid 1–60). Wiring the SSE feed into the dashboard hook is a follow-up to the display-side work.
+
 ## Running fullscreen
 
 Use browser fullscreen (F11 on many browsers; Control–Command–F on macOS). Set display resolution to 1920 × 1080 and browser zoom to 100%. Turn off OS sleep if you want an unattended display. Use the production server for normal operation. A process manager/systemd/launchd can restart the server after reboot; no daemon installation is included. The browser retries refreshes automatically after network failures and when it regains focus/connectivity.

@@ -20,6 +20,7 @@ import { healthAdapter } from "./health";
 import { systemsAdapter } from "./systems";
 import { AdapterCache } from "@/lib/cache";
 import { log } from "@/lib/log";
+import { getCollector } from "@/server/collector";
 import { createHash } from "node:crypto";
 export function selectAdapter<T>(
   real: Adapter<T> | null,
@@ -90,8 +91,14 @@ function createCaches() {
 const holder = globalThis as typeof globalThis & {
   lifedashCaches?: ReturnType<typeof createCaches>;
 };
+export function getCaches(): ReturnType<typeof createCaches> {
+  return (holder.lifedashCaches ??= createCaches());
+}
 export async function getDashboard(): Promise<DashboardData> {
-  const caches = (holder.lifedashCaches ??= createCaches());
+  const collector = getCollector();
+  const snapshot = collector?.isRunning() ? collector.latest() : null;
+  if (snapshot) return snapshot.data;
+  const caches = getCaches();
   const values = await Promise.all(
     Object.entries(caches).map(async ([key, cache]) => [
       key,
