@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { renderToString } from "react-dom/server";
 import { Dashboard } from "../src/components/dashboard";
+import { Feed } from "../src/components/shared/feed";
 import type { DashboardData, DisplayConfig, Mode } from "../src/domains/models";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -161,4 +162,66 @@ test("null feeds render 'No data' and empty-but-present lists keep their copy", 
   assert.ok(emptyText.includes("No work events ahead"));
   assert.ok(emptyText.includes("No personal events ahead"));
   assert.ok(emptyText.includes("No habits in the Habits list"));
+});
+
+test("a NO DATA feed never picks up a stale suffix", () => {
+  const html = renderToString(
+    Feed({
+      state: {
+        loading: false,
+        data: null,
+        source: "real",
+        provider: "Demo",
+        status: "error",
+        lastSuccess: null,
+        lastAttempt: "2026-10-03T04:08:00.000Z",
+        error: "Unavailable",
+        refreshMs: 60000,
+      },
+      now: new Date("2026-10-03T04:20:00.000Z"),
+    }),
+  );
+  assert.equal(html.match(/>NO DATA</g)?.length, 1);
+  assert.ok(!html.includes("UNAVAILABLE"), html);
+  assert.ok(!html.includes("STALE"), html);
+  assert.ok(!html.includes("feed-divider"), html);
+});
+
+// The last accepted refresh is 10 minutes behind the ticking clock, and the
+// feeds are 1 second old at that refresh: deriving the clock straight from
+// `receivedAt` reports a fresh dashboard, the ticking clock reports stale feeds.
+const CLOCK_RECEIVED_AT = Date.parse("2026-10-03T04:00:00.000Z");
+const CLOCK_NOW = CLOCK_RECEIVED_AT + 10 * 60_000;
+
+function clockFixture(): DashboardData {
+  const data = structuredClone(fixture.data);
+  for (const state of Object.values(data)) {
+    state.refreshMs = 30000;
+    state.status = "ready";
+    state.lastSuccess = new Date(CLOCK_RECEIVED_AT - 1000).toISOString();
+  }
+  return data;
+}
+
+test("the dashboard clock keeps ticking past the last refresh", () => {
+  const data = clockFixture();
+  const html = renderToString(
+    Dashboard({
+      initial: data,
+      renderedAt: new Date(CLOCK_NOW).toISOString(),
+      display,
+      demo: false,
+      forcedMode: "day",
+      paused: true,
+      useData: () => ({
+        data,
+        systemHistory: [],
+        connectionError: false,
+        receivedAt: CLOCK_RECEIVED_AT,
+        transport: "poll",
+      }),
+    }),
+  );
+  assert.ok(html.includes("STALE 10m"), "the ticking clock drives staleness");
+  assert.ok(!html.includes("SYSTEMS NORMAL"), "the feeds read as stale");
 });

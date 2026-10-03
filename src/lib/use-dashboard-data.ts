@@ -31,6 +31,45 @@ export function systemSample(data: DashboardData): SystemSample {
 
 const HISTORY_LIMIT = 18;
 
+/** How often the dashboard re-polls the endpoint. */
+export const DASHBOARD_POLL_INTERVAL_MS = 30000;
+
+/** The poll target for a given mode; demo mode asks the API for demo data. */
+export function dashboardPollUrl(demo: boolean) {
+  return `/api/dashboard${demo ? "?demo=true" : ""}`;
+}
+
+export type PollingEnvironment = {
+  win: Pick<Window, "addEventListener" | "removeEventListener">;
+  doc: Pick<
+    Document,
+    "addEventListener" | "removeEventListener" | "visibilityState"
+  >;
+};
+
+/**
+ * Wire a controller to the browser's refresh cadence: a fixed interval plus the
+ * `online` and `visibilitychange` wake-ups. Returns the cleanup function.
+ */
+export function startDashboardPolling(
+  controller: PollingController,
+  env: PollingEnvironment,
+): () => void {
+  const tick = () => void controller.tick();
+  const interval = setInterval(tick, DASHBOARD_POLL_INTERVAL_MS);
+  const onVisible = () => {
+    if (env.doc.visibilityState === "visible") tick();
+  };
+  env.win.addEventListener("online", tick);
+  env.doc.addEventListener("visibilitychange", onVisible);
+  return () => {
+    controller.stop();
+    clearInterval(interval);
+    env.win.removeEventListener("online", tick);
+    env.doc.removeEventListener("visibilitychange", onVisible);
+  };
+}
+
 /**
  * Pure state transition for one accepted dashboard response. Throws
  * `Invalid dashboard response` (from the validator) on malformed input, in
@@ -168,7 +207,7 @@ export function useDashboardData({
   useEffect(() => {
     const controller = createPollingController({
       initial: { data, systemHistory, connectionError: false },
-      url: `/api/dashboard${demo ? "?demo=true" : ""}`,
+      url: dashboardPollUrl(demo),
       onState: (next, at) => {
         setData(next.data);
         setSystemHistory(next.systemHistory);
@@ -177,19 +216,13 @@ export function useDashboardData({
       },
     });
     controllerRef.current = controller;
-    const tick = () => void controller.tick();
-    const interval = setInterval(tick, 30000);
-    const onVisible = () => {
-      if (document.visibilityState === "visible") tick();
-    };
-    window.addEventListener("online", tick);
-    document.addEventListener("visibilitychange", onVisible);
+    const stopPolling = startDashboardPolling(controller, {
+      win: window,
+      doc: document,
+    });
     return () => {
-      controller.stop();
+      stopPolling();
       controllerRef.current = null;
-      clearInterval(interval);
-      window.removeEventListener("online", tick);
-      document.removeEventListener("visibilitychange", onVisible);
     };
     // The controller is seeded once and only rebuilt when the polling target
     // changes.

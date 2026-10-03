@@ -21,6 +21,18 @@ function hasDataKey(value: unknown): value is { data: unknown } {
   return isObject(value) && "data" in value;
 }
 
+function isNullableNumber(value: unknown): boolean {
+  return value === null || typeof value === "number";
+}
+
+function hasRefreshMs(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    typeof value.refreshMs === "number" &&
+    Number.isFinite(value.refreshMs)
+  );
+}
+
 function isArray(value: unknown): boolean {
   return Array.isArray(value);
 }
@@ -35,7 +47,11 @@ function isFeedPayloadValid(key: keyof DashboardData, payload: unknown): boolean
   if (!isObject(payload)) return false;
   switch (key) {
     case "systems":
-      return isObject(payload.machine) && isArray(payload.endpoints);
+      return (
+        isObject(payload.machine) &&
+        isNullableNumber(payload.machine.cpuPercent) &&
+        isArray(payload.endpoints)
+      );
     case "ai":
       return isArray(payload.providers);
     case "goals":
@@ -64,7 +80,11 @@ export function normalizeDashboardResponse(value: unknown): DashboardData {
   if (
     !FEED_KEYS.every((key) => {
       const feed = data[key];
-      return hasDataKey(feed) && isFeedPayloadValid(key, feed.data);
+      return (
+        hasDataKey(feed) &&
+        hasRefreshMs(feed) &&
+        isFeedPayloadValid(key, feed.data)
+      );
     })
   )
     throw new Error("Invalid dashboard response");

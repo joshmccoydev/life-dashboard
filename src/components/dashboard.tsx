@@ -9,10 +9,11 @@ import { normalizeDashboardResponse } from "@/lib/dashboard-response";
 import { Clock } from "@/components/shared/Clock";
 import { PanelBoundary } from "@/components/shared/PanelBoundary";
 import { DomainColumn } from "@/components/shared/DomainColumn";
-import { SystemHistoryContext } from "@/components/shared/client-state";
+import { SystemHistoryContext, clockAt } from "@/components/shared/client-state";
 import { Weather } from "@/components/panels/Weather";
 import { COLUMNS } from "@/components/widgets/layout";
 import { WIDGETS } from "@/components/widgets/definitions";
+import type { UseDashboardData } from "@/lib/use-dashboard-data";
 
 export { normalizeDashboardResponse };
 
@@ -23,6 +24,7 @@ function LiveDashboard({
   demo,
   forcedMode,
   paused,
+  useData = useDashboardData,
 }: {
   initial: DashboardData;
   renderedAt: string;
@@ -30,18 +32,27 @@ function LiveDashboard({
   demo: boolean;
   forcedMode?: string;
   paused: boolean;
+  /**
+   * The live data hook. Overridable so the clock derivation below can be
+   * exercised without a DOM renderer; production always uses the real hook.
+   */
+  useData?: (options: {
+    initial: DashboardData;
+    demo: boolean;
+  }) => UseDashboardData;
 }) {
-  const { data, systemHistory, connectionError, receivedAt } =
-    useDashboardData({ initial, demo });
+  const { data, systemHistory, connectionError, receivedAt } = useData({
+    initial,
+    demo,
+  });
   const [now, setNow] = useState(() => new Date(renderedAt));
   const [rotation, setRotation] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 15000);
     return () => clearInterval(timer);
   }, []);
-  // The refresh timestamp is part of the data, so derive the clock from it
-  // instead of writing state from an effect.
-  const clockNow = receivedAt !== null ? new Date(receivedAt) : now;
+  // `now` keeps ticking every 15 s; a fresher refresh time only moves it forward.
+  const clockNow = clockAt(now, receivedAt);
   useEffect(() => {
     if (paused) return;
     const timer = setInterval(
@@ -139,7 +150,6 @@ function LiveDashboard({
                       now={clockNow}
                       display={display}
                       mode={mode}
-                      history={systemHistory}
                     />
                   );
                 })}

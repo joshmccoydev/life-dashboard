@@ -14,8 +14,6 @@ export type ColumnLayout = {
   widgetIds: string[];
 };
 
-export const HEADER_WIDGET_IDS = ["clock", "weather"] as const;
-
 export const COLUMNS: ColumnLayout[] = [
   {
     id: "personal",

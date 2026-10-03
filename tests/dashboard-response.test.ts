@@ -76,3 +76,20 @@ test("rejects structurally wrong payloads", () => {
 test("the dashboard re-export is the same function", () => {
   assert.equal(fromFacade, normalizeDashboardResponse);
 });
+
+test("rejects a non-numeric cpuPercent and a feed without refreshMs", () => {
+  const cpu = clone();
+  cpu.systems.data!.machine.cpuPercent = "42" as never;
+  assert.throws(() => normalizeDashboardResponse({ data: cpu }), {
+    message: "Invalid dashboard response",
+  });
+
+  const noRefresh = clone() as unknown as Record<
+    string,
+    Record<string, unknown>
+  >;
+  delete noRefresh.weather.refreshMs;
+  assert.throws(() => normalizeDashboardResponse({ data: noRefresh }), {
+    message: "Invalid dashboard response",
+  });
+});

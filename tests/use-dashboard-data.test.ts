@@ -1,13 +1,17 @@
-import test from "node:test";
+import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
+  DASHBOARD_POLL_INTERVAL_MS,
   applyDashboardUpdate,
   createPollingController,
+  dashboardPollUrl,
+  startDashboardPolling,
   systemSample,
 } from "../src/lib/use-dashboard-data";
+import type { PollingController } from "../src/lib/use-dashboard-data";
 import type { DashboardData } from "../src/domains/models";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -150,4 +154,133 @@ test("the controller reports the poll transport surface and cleans up", async ()
   assert.equal(controller.isBusy(), false);
   const transport = "poll" as const;
   assert.equal(transport, "poll");
+});
+
+test("a failure after a success keeps the last accepted data", async () => {
+  const updated = freshData();
+  updated.weather.data!.temperature = 61;
+  let calls = 0;
+  const controller = createPollingController({
+    initial: seed(),
+    fetchImpl: (async () => {
+      calls++;
+      if (calls === 1) return jsonResponse({ data: updated });
+      throw new Error("offline");
+    }) as unknown as typeof fetch,
+    now: () => calls,
+  });
+  await controller.tick();
+  assert.equal(controller.read().connectionError, false);
+  assert.equal(controller.read().data.weather.data?.temperature, 61);
+  const before = controller.read();
+  await controller.tick();
+  const after = controller.read();
+  assert.equal(after.connectionError, true);
+  assert.equal(after.data.weather.data?.temperature, 61, "last data kept");
+  assert.deepEqual(after.data, before.data);
+  assert.equal(after.systemHistory.length, before.systemHistory.length);
+  controller.stop();
+});
+
+test("an in-flight request is aborted at 15 s and not before", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    let aborted = false;
+    const controller = createPollingController({
+      initial: seed(),
+      fetchImpl: ((_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal!.addEventListener("abort", () => {
+            aborted = true;
+            reject(new Error("aborted"));
+          });
+        })) as unknown as typeof fetch,
+      now: () => 1,
+    });
+    const pending = controller.tick();
+    mock.timers.tick(14999);
+    assert.equal(aborted, false, "still in flight just before 15 s");
+    mock.timers.tick(1);
+    assert.equal(aborted, true, "aborted at 15 s");
+    await pending;
+    assert.equal(controller.read().connectionError, true);
+    controller.stop();
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("the demo poll URL asks the API for demo data", async () => {
+  assert.equal(dashboardPollUrl(true), "/api/dashboard?demo=true");
+  assert.equal(dashboardPollUrl(false), "/api/dashboard");
+  const hookSource = readFileSync(
+    join(here, "../src/lib/use-dashboard-data.ts"),
+    "utf8",
+  );
+  assert.match(
+    hookSource,
+    /url:\s*dashboardPollUrl\(demo\)/,
+    "the hook must pass its demo flag into the poll URL",
+  );
+  const urls: string[] = [];
+  const controller = createPollingController({
+    initial: seed(),
+    url: dashboardPollUrl(true),
+    fetchImpl: (async (url: string) => {
+      urls.push(url);
+      return jsonResponse({ data: freshData() });
+    }) as unknown as typeof fetch,
+    now: () => 5,
+  });
+  await controller.tick();
+  assert.deepEqual(urls, ["/api/dashboard?demo=true"]);
+  controller.stop();
+});
+
+function fakeEnvironment() {
+  const win = new EventTarget();
+  const doc = new EventTarget() as EventTarget & {
+    visibilityState: DocumentVisibilityState;
+  };
+  doc.visibilityState = "hidden";
+  return { win, doc };
+}
+
+test("the poll wiring runs on the 30 s interval and wakes on online/visible", () => {
+  assert.equal(DASHBOARD_POLL_INTERVAL_MS, 30000);
+  mock.timers.enable({ apis: ["setInterval"] });
+  try {
+    let ticks = 0;
+    const controller = {
+      tick: async () => {
+        ticks++;
+      },
+      stop: () => {},
+    } as unknown as PollingController;
+    const env = fakeEnvironment();
+    const stop = startDashboardPolling(controller, env);
+
+    mock.timers.tick(DASHBOARD_POLL_INTERVAL_MS - 1);
+    assert.equal(ticks, 0, "no tick before the interval elapses");
+    mock.timers.tick(1);
+    assert.equal(ticks, 1, "one tick per interval");
+    mock.timers.tick(DASHBOARD_POLL_INTERVAL_MS);
+    assert.equal(ticks, 2);
+
+    env.win.dispatchEvent(new Event("online"));
+    assert.equal(ticks, 3, "an online event triggers a refresh");
+    env.doc.visibilityState = "visible";
+    env.doc.dispatchEvent(new Event("visibilitychange"));
+    assert.equal(ticks, 4, "becoming visible triggers a refresh");
+    env.doc.visibilityState = "hidden";
+    env.doc.dispatchEvent(new Event("visibilitychange"));
+    assert.equal(ticks, 4, "hidden tabs do not refresh");
+
+    stop();
+    env.win.dispatchEvent(new Event("online"));
+    mock.timers.tick(DASHBOARD_POLL_INTERVAL_MS);
+    assert.equal(ticks, 4, "cleanup removes the interval and both listeners");
+  } finally {
+    mock.timers.reset();
+  }
 });

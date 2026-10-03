@@ -25,15 +25,22 @@ Google Fonts metadata at <https://github.com/google/fonts/blob/main/ofl/albertsa
 lists the same family, OFL license, and 2021 copyright, and points to the
 upstream project.
 
-The committed file is a 128420-byte static build of the family at version
-1.025. On 2026-10-03, the corresponding official Google Fonts variable file was
-retrieved from
+The committed file is a 128420-byte variable build of the family at version
+1.025: its `fvar` table declares a `wght` axis from 100 to 900 with nine named
+instances (it is not a static instance). `layout.tsx` loads it through
+`next/font/local` and never fetches a font at runtime. On 2026-10-03, the
+corresponding official Google Fonts variable file was retrieved from
 <https://raw.githubusercontent.com/google/fonts/main/ofl/albertsans/AlbertSans%5Bwght%5D.ttf>
 for comparison only. It is 129000 bytes with sha256
 `8fe5d4cf5822d7096d4d17ad781c90f97c745ac13a22be619db74966fba45fda`; it does
 not match the committed file's 128420 bytes or sha256. The committed file was
 left unchanged because it is a different artifact and replacement would
 require a separate rendered-metrics review.
+
+The CTO-0008 ticket and the CTO-0015 REV1 dispatch both say the embedded
+copyright reads 2023. That claim is wrong: the font's own `name` table ID 0
+says 2021, as does the OFL header, and the test reads the year out of the font
+bytes rather than trusting either document.
 
 ## Status: unverified upstream match
 

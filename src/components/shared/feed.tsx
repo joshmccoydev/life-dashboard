@@ -14,7 +14,7 @@ export function feedBadge(state: DataState<unknown>) {
 
 export function Feed({ state, now }: { state: DataState<unknown>; now: Date }) {
   const noData = state.source === "real" && state.data === null;
-  const stale = state.status !== "ready" || isWidgetStale(null, state, now);
+  const stale = state.status !== "ready" || isWidgetStale(state, now);
   return (
     <span className={`feed ${stale ? "feed-stale" : ""}`} title={state.error || `${state.provider} ${String.fromCharCode(183)} ${ageLabel(state.lastSuccess, now)}`}>
       {noData ? "NO DATA" : feedBadge(state)}
