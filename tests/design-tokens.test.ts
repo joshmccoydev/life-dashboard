@@ -87,3 +87,41 @@ test("the license header year matches the font's embedded copyright year", () =>
     "PROVENANCE.md records the font's embedded copyright string",
   );
 });
+
+test("the svh type and space constants are the exact fractions of the old decimals", () => {
+  // Fractions are written as calc(100svh * N / D) so no minifier rounds the
+  // constant. Pin each one to the decimal it replaced (percent of 100svh).
+  const expected: Record<string, [number, number]> = {
+    "--type-tier-1": [8, 125],
+    "--type-tier-2": [4, 125],
+    "--type-tier-3": [2, 75],
+    "--type-detail": [8, 375],
+    "--type-micro": [7, 375],
+    "--space-1": [1, 225],
+    "--space-2": [2, 225],
+    "--space-3": [14, 1125],
+    "--space-4": [4, 225],
+    "--space-5": [2, 75],
+    "--space-6": [44, 1125],
+  };
+  const decimals: Record<string, number> = {
+    "--type-tier-1": 6.4, "--type-tier-2": 3.2, "--type-tier-3": 2.6667,
+    "--type-detail": 2.1333, "--type-micro": 1.8667, "--space-1": 0.4444,
+    "--space-2": 0.8889, "--space-3": 1.2444, "--space-4": 1.7778,
+    "--space-5": 2.6667, "--space-6": 3.9111,
+  };
+  for (const [name, [n, d]] of Object.entries(expected)) {
+    const line = tokens.match(new RegExp(`${name}:[^;]*;`))?.[0] ?? "";
+    assert.ok(
+      line.includes(`calc(100svh * ${n} / ${d})`),
+      `${name}: ${line}`,
+    );
+    assert.ok(
+      Math.abs((n / d) * 100 - decimals[name]) < 0.0001,
+      `${name} fraction ${n}/${d} matches ${decimals[name]}svh`,
+    );
+  }
+  const root = tokens.match(/\n\s*font-size:\s*clamp\(20px[^;]*;/)?.[0] ?? "";
+  assert.ok(root.includes("calc(100svh * 7 / 375)"), root);
+  assert.equal((tokens.match(/100svh \* \d+ \/ \d+/g) ?? []).length, 13 /* 11 tokens, root font-size, max-width 16 / 9 */);
+});

@@ -33,6 +33,17 @@ function hasRefreshMs(value: unknown): boolean {
   );
 }
 
+function hasFeedStatus(value: unknown): boolean {
+  return (
+    isObject(value) &&
+    (value.status === "ready" ||
+      value.status === "stale" ||
+      value.status === "error") &&
+    (value.source === "real" || value.source === "mock") &&
+    (value.lastSuccess === null || typeof value.lastSuccess === "string")
+  );
+}
+
 function isArray(value: unknown): boolean {
   return Array.isArray(value);
 }
@@ -50,6 +61,8 @@ function isFeedPayloadValid(key: keyof DashboardData, payload: unknown): boolean
       return (
         isObject(payload.machine) &&
         isNullableNumber(payload.machine.cpuPercent) &&
+        isNullableNumber(payload.machine.memoryPercent) &&
+        isNullableNumber(payload.machine.diskPercent) &&
         isArray(payload.endpoints)
       );
     case "ai":
@@ -83,6 +96,7 @@ export function normalizeDashboardResponse(value: unknown): DashboardData {
       return (
         hasDataKey(feed) &&
         hasRefreshMs(feed) &&
+        hasFeedStatus(feed) &&
         isFeedPayloadValid(key, feed.data)
       );
     })

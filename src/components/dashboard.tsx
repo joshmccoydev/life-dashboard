@@ -9,7 +9,7 @@ import { normalizeDashboardResponse } from "@/lib/dashboard-response";
 import { Clock } from "@/components/shared/Clock";
 import { PanelBoundary } from "@/components/shared/PanelBoundary";
 import { DomainColumn } from "@/components/shared/DomainColumn";
-import { SystemHistoryContext, clockAt } from "@/components/shared/client-state";
+import { SystemHistoryContext, clockAt, startClockTick } from "@/components/shared/client-state";
 import { Weather } from "@/components/panels/Weather";
 import { COLUMNS } from "@/components/widgets/layout";
 import { WIDGETS } from "@/components/widgets/definitions";
@@ -47,10 +47,7 @@ function LiveDashboard({
   });
   const [now, setNow] = useState(() => new Date(renderedAt));
   const [rotation, setRotation] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 15000);
-    return () => clearInterval(timer);
-  }, []);
+  useEffect(() => startClockTick(setNow), []);
   // `now` keeps ticking every 15 s; a fresher refresh time only moves it forward.
   const clockNow = clockAt(now, receivedAt);
   useEffect(() => {

@@ -17,3 +17,9 @@ export function clockAt(now: Date, receivedAt: number | null): Date {
     ? new Date(receivedAt)
     : now;
 }
+
+/** Start the 15 s display-clock tick; returns the cleanup that stops it. */
+export function startClockTick(setNow: (now: Date) => void, intervalMs = 15000) {
+  const timer = setInterval(() => setNow(new Date()), intervalMs);
+  return () => clearInterval(timer);
+}

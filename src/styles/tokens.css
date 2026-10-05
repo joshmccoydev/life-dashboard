@@ -60,6 +60,10 @@
   font-family: var(--font-ui);
   font-synthesis: none;
   /* Scale from the 16:9 canvas, not a pillarboxed viewport's outer width. */
+  /* Parity note: Lightning CSS folds this calc to `1.86667svh` (rounded UP from
+     1.866666...). At 16:9 the `1.05vw` term must win min(), and it only does so
+     because that rounding goes up; a minifier that rounded down would let the
+     svh term win by a sub-pixel amount. Tests pin the fraction itself. */
   font-size: clamp(20px, min(1.05vw, calc(100svh * 7 / 375)), 42px);
   font-variant-numeric: tabular-nums lining-nums;
   background: var(--color-canvas);

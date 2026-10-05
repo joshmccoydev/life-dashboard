@@ -284,3 +284,24 @@ test("the poll wiring runs on the 30 s interval and wakes on online/visible", ()
     mock.timers.reset();
   }
 });
+
+test("a refresh already in flight blocks a second one", async () => {
+  let calls = 0;
+  let release!: (response: Response) => void;
+  const controller = createPollingController({
+    initial: seed(),
+    fetchImpl: (() => {
+      calls++;
+      return new Promise<Response>((resolve) => { release = resolve; });
+    }) as unknown as typeof fetch,
+    now: () => 1,
+  });
+  const first = controller.tick();
+  await controller.tick();
+  assert.equal(calls, 1, "the overlapping tick did not fetch");
+  assert.equal(controller.isBusy(), true);
+  release(jsonResponse({ data: freshData() }));
+  await first;
+  assert.equal(controller.isBusy(), false);
+  controller.stop();
+});
