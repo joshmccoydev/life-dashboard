@@ -125,7 +125,7 @@ test("one rejecting domain keeps its previous state and does not block others", 
   assert.ok(second?.data.weather.data);
 });
 
-test("a hanging domain times out without blocking the other domains", async () => {
+test("a hanging domain times out without blocking the other domains", { timeout: 5000 }, async () => {
   let hanging = false;
   const { caches } = makeCaches({
     calendar: {
@@ -212,7 +212,7 @@ test("a failed null refresh preserves a persisted last-known value as stale", as
   await new Promise((resolve) => setTimeout(resolve, 25));
 });
 
-test("a slow domain does not delay the other domains' snapshots", async () => {
+test("a slow domain does not delay the other domains' snapshots", { timeout: 5000 }, async () => {
   let releaseSlow: (() => void) | null = null;
   const slow = new Promise<DataState<unknown>>((resolve) => {
     releaseSlow = () => resolve(state({ domain: "calendar" }));

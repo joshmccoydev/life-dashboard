@@ -274,7 +274,7 @@ test("?demo=true returns demo data and never subscribes", async () => {
   await new Promise((resolve) => setImmediate(resolve));
 });
 
-test("HEAD returns headers only and never takes a client slot", async () => {
+test("HEAD returns headers only and never takes a client slot", { timeout: 5000 }, async () => {
   await liveCollector();
   assert.equal(streamClientCount(), 0);
   const response = await HEAD();
@@ -289,7 +289,7 @@ test("HEAD returns headers only and never takes a client slot", async () => {
   assert.equal(streamClientCount(), 0);
 });
 
-test("16+ HEADs leave the stream endpoint working for GET", async () => {
+test("16+ HEADs leave the stream endpoint working for GET", { timeout: 5000 }, async () => {
   const { collector } = await liveCollector();
   collector.stop();
   for (let i = 0; i < 20; i += 1) {
