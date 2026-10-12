@@ -20,7 +20,29 @@ import { healthAdapter } from "./health";
 import { systemsAdapter } from "./systems";
 import { AdapterCache } from "@/lib/cache";
 import { log } from "@/lib/log";
+import { getCollector } from "@/server/collector";
 import { createHash } from "node:crypto";
+
+const DOMAIN_KEYS: readonly Domain[] = [
+  "weather",
+  "calendar",
+  "reminders",
+  "finance",
+  "health",
+  "build",
+  "ai",
+  "systems",
+  "habits",
+  "goals",
+];
+
+/** True when every dashboard domain is present (a seeded restart may not be). */
+export function isCompleteDashboardData(
+  data: Partial<DashboardData>,
+): data is DashboardData {
+  return DOMAIN_KEYS.every((key) => key in data);
+}
+
 export function selectAdapter<T>(
   real: Adapter<T> | null,
   mock: Adapter<T>,
@@ -90,15 +112,28 @@ function createCaches() {
 const holder = globalThis as typeof globalThis & {
   lifedashCaches?: ReturnType<typeof createCaches>;
 };
+export function getCaches(): ReturnType<typeof createCaches> {
+  return (holder.lifedashCaches ??= createCaches());
+}
 export async function getDashboard(): Promise<DashboardData> {
-  const caches = (holder.lifedashCaches ??= createCaches());
+  const collector = getCollector();
+  const snapshot = collector?.isRunning() ? collector.latest() : null;
+  if (snapshot && isCompleteDashboardData(snapshot.data)) return snapshot.data;
+  const caches = getCaches();
+  // After a restart the collector is seeded with the persisted domains only;
+  // fill the missing domains from the caches so the response keeps ten keys.
+  const keys = snapshot
+    ? DOMAIN_KEYS.filter(
+        (key) => !(key in (snapshot.data as Record<string, unknown>)),
+      )
+    : (Object.keys(caches) as Domain[]);
   const values = await Promise.all(
-    Object.entries(caches).map(async ([key, cache]) => [
-      key,
-      await cache.get(),
-    ]),
+    keys.map(async (key) => [key, await caches[key].get()] as const),
   );
-  return Object.fromEntries(values) as DashboardData;
+  const fromCaches = Object.fromEntries(values) as Partial<DashboardData>;
+  return (snapshot
+    ? { ...fromCaches, ...snapshot.data }
+    : fromCaches) as DashboardData;
 }
 export async function getDemoDashboard(): Promise<DashboardData> {
   const pairs = [

@@ -89,6 +89,12 @@ export const config = {
   weatherUnit:
     process.env.WEATHER_UNIT === "C" ? ("C" as const) : ("F" as const),
   demo: process.env.LIFEDASH_DEMO === "true",
+  collector: {
+    enabled:
+      (process.env.LIFEDASH_COLLECTOR?.trim().toLowerCase() || "on") !== "off",
+    tickMs:
+      number(process.env.LIFEDASH_COLLECTOR_TICK_SECONDS, 5, 1, 60) * 1000,
+  },
   workCalendars: workCalendars(),
   habitsListName: process.env.HABITS_LIST_NAME?.trim() || "Habits",
   goalsListName: process.env.GOALS_LIST_NAME?.trim() || "Goals",
