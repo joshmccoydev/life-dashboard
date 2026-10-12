@@ -33,21 +33,24 @@
   --font-ui: var(--font-display), "Avenir Next", "Segoe UI", sans-serif;
   --font-mono: "SFMono-Regular", "Cascadia Code", "Liberation Mono", monospace;
   /* Every tier keeps a >=20px floor at 1920x1080 and scales with viewport
-     width, so the 4K layout is exactly 2x the 1080p layout. */
-  --type-tier-1: clamp(3rem, 3.6vw, 6rem);
-  --type-tier-2: clamp(1.6rem, 1.8vw, 2.6rem);
-  --type-tier-3: clamp(1.4rem, 1.5vw, 2.2rem);
-  --type-detail: clamp(1rem, 1.2vw, 1.7rem);
-  --type-micro: clamp(1rem, 1.05vw, 1.5rem);
+     width, so the 4K layout is exactly 2x the 1080p layout. The svh term is
+     written as an exact `calc(100svh * N / D)` fraction: Lightning CSS rounds
+     decimal svh constants to 6 significant digits, which made the Turbopack
+     and webpack builds render slightly different text. */
+  --type-tier-1: clamp(3rem, min(3.6vw, calc(100svh * 8 / 125)), 6rem);
+  --type-tier-2: clamp(1.6rem, min(1.8vw, calc(100svh * 4 / 125)), 2.6rem);
+  --type-tier-3: clamp(1.4rem, min(1.5vw, calc(100svh * 2 / 75)), 2.2rem);
+  --type-detail: clamp(1rem, min(1.2vw, calc(100svh * 8 / 375)), 1.7rem);
+  --type-micro: clamp(1rem, min(1.05vw, calc(100svh * 7 / 375)), 1.5rem);
 
   --overscan-inline: 3.25%;
   --overscan-block: 1.4%;
-  --space-1: clamp(0.2rem, 0.25vw, 0.5rem);
-  --space-2: clamp(0.4rem, 0.5vw, 0.9rem);
-  --space-3: clamp(0.6rem, 0.7vw, 1.2rem);
-  --space-4: clamp(0.9rem, 1vw, 1.7rem);
-  --space-5: clamp(1.3rem, 1.5vw, 2.4rem);
-  --space-6: clamp(1.8rem, 2.2vw, 3.4rem);
+  --space-1: clamp(0.2rem, min(0.25vw, calc(100svh * 1 / 225)), 0.5rem);
+  --space-2: clamp(0.4rem, min(0.5vw, calc(100svh * 2 / 225)), 0.9rem);
+  --space-3: clamp(0.6rem, min(0.7vw, calc(100svh * 14 / 1125)), 1.2rem);
+  --space-4: clamp(0.9rem, min(1vw, calc(100svh * 4 / 225)), 1.7rem);
+  --space-5: clamp(1.3rem, min(1.5vw, calc(100svh * 2 / 75)), 2.4rem);
+  --space-6: clamp(1.8rem, min(2.2vw, calc(100svh * 44 / 1125)), 3.4rem);
 
   --auto-dim-idle: 0.72;
   --auto-dim-night: 0.62;
@@ -56,7 +59,12 @@
 
   font-family: var(--font-ui);
   font-synthesis: none;
-  font-size: clamp(20px, 1.05vw, 42px);
+  /* Scale from the 16:9 canvas, not a pillarboxed viewport's outer width. */
+  /* Parity note: Lightning CSS folds this calc to `1.86667svh` (rounded UP from
+     1.866666...). At 16:9 the `1.05vw` term must win min(), and it only does so
+     because that rounding goes up; a minifier that rounded down would let the
+     svh term win by a sub-pixel amount. Tests pin the fraction itself. */
+  font-size: clamp(20px, min(1.05vw, calc(100svh * 7 / 375)), 42px);
   font-variant-numeric: tabular-nums lining-nums;
   background: var(--color-canvas);
   color: var(--color-text);
