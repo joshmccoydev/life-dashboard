@@ -1,21 +1,665 @@
 "use client";
-import { useEffect, useState } from "react";
-import { Activity, Check, Network, TriangleAlert } from "lucide-react";
-import type { DashboardData, DisplayConfig, Mode } from "@/domains/models";
-import { isStale, modeAt } from "@/lib/time";
+import { useEffect, useState, type ReactNode } from "react";
+import {
+  Activity,
+  ArrowRight,
+  Bell,
+  Bot,
+  CalendarDays,
+  Check,
+  Code2,
+  DollarSign,
+  Folder,
+  HeartPulse,
+  Network,
+  Server,
+  Target,
+  TriangleAlert,
+  type LucideIcon,
+} from "lucide-react";
+import type {
+  DashboardData,
+  DataState,
+  DisplayConfig,
+  HealthState,
+  Mode,
+} from "@/domains/models";
+import {
+  ageLabel,
+  dayKeyOffset,
+  isStale,
+  localDateKey,
+  modeAt,
+} from "@/lib/time";
 import { evaluateAlerts, attentionView } from "@/lib/alerts";
 import { useDashboardData } from "@/lib/use-dashboard-data";
 import { normalizeDashboardResponse } from "@/lib/dashboard-response";
 import { Clock } from "@/components/shared/Clock";
 import { PanelBoundary } from "@/components/shared/PanelBoundary";
-import { DomainColumn } from "@/components/shared/DomainColumn";
-import { SystemHistoryContext, clockAt, startClockTick } from "@/components/shared/client-state";
+import {
+  SystemHistoryContext,
+  clockAt,
+  startClockTick,
+} from "@/components/shared/client-state";
 import { Weather } from "@/components/panels/Weather";
-import { COLUMNS } from "@/components/widgets/layout";
-import { WIDGETS } from "@/components/widgets/definitions";
+import { Feed } from "@/components/shared/feed";
+import { Build } from "@/components/panels/Build";
+import { Goals } from "@/components/panels/Goals";
+import { Habits } from "@/components/panels/Habits";
+import { Projects } from "@/components/panels/Projects";
+import { Systems } from "@/components/panels/Systems";
 import type { UseDashboardData } from "@/lib/use-dashboard-data";
 
 export { normalizeDashboardResponse };
+
+type ExtendedHealthState = HealthState & {
+  week?: { steps?: number; goal?: number; activeDays?: number };
+  streak?: { days?: number; label?: string };
+};
+
+function DashboardCard({
+  id,
+  title,
+  icon: Icon,
+  source,
+  now,
+  children,
+  className = "",
+}: {
+  id: string;
+  title: string;
+  icon: LucideIcon;
+  source: DataState<unknown>;
+  now: Date;
+  children: ReactNode;
+  className?: string;
+}) {
+  const empty = source.data === null;
+  const stale =
+    !empty &&
+    (source.status !== "ready" ||
+      isStale(source.lastSuccess, now, source.refreshMs));
+
+  return (
+    <section
+      className={`dashboard-card card ${className}`}
+      aria-labelledby={`${id}-title`}
+      role="region"
+    >
+      <header className="dashboard-panel-header">
+        <div className="dashboard-panel-heading">
+          <Icon aria-hidden="true" />
+          <h2 id={`${id}-title`}>{title}</h2>
+        </div>
+        <div className="dashboard-panel-meta">
+          <span>Updated {ageLabel(source.lastSuccess, now)}</span>
+          {empty ? (
+            <strong className="dashboard-panel-status">No data</strong>
+          ) : stale ? (
+            <strong className="dashboard-panel-status">Stale</strong>
+          ) : null}
+        </div>
+      </header>
+      <div className="dashboard-panel-body">{children}</div>
+    </section>
+  );
+}
+
+function BotsPanel({ data, now }: { data: DashboardData; now: Date }) {
+  const providers = [...(data.ai.data?.providers ?? [])].sort((left, right) => {
+    const leftStatus = left.status as string;
+    const rightStatus = right.status as string;
+    const leftWaiting =
+      leftStatus === "waiting" ||
+      left.detail?.toLowerCase().includes("waiting on josh");
+    const rightWaiting =
+      rightStatus === "waiting" ||
+      right.detail?.toLowerCase().includes("waiting on josh");
+    return Number(rightWaiting) - Number(leftWaiting);
+  });
+
+  return (
+    <DashboardCard
+      id="bots"
+      title="Bots"
+      icon={Bot}
+      source={data.ai}
+      now={now}
+      className="dashboard-card-bots"
+    >
+      {data.ai.data === null ? (
+        <div className="domain-empty">No data</div>
+      ) : providers.length ? (
+        <div className="dashboard-bot-list">
+          {providers.map((provider) => {
+            const status = provider.status as string;
+            const waiting =
+              status === "waiting" ||
+              provider.detail?.toLowerCase().includes("waiting on josh");
+            return (
+              <div
+                className={`dashboard-bot-row${waiting ? " waiting highlight attention" : ""}`}
+                data-waiting={waiting ? "true" : undefined}
+                key={provider.name}
+              >
+                <div>
+                  <strong>{provider.name}</strong>
+                  <p>{provider.detail || "No recent action"}</p>
+                </div>
+                <span>{provider.value || provider.status}</span>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="domain-empty">No bot activity</div>
+      )}
+      <Feed state={data.ai} now={now} />
+    </DashboardCard>
+  );
+}
+
+function MoneyPanel({
+  data,
+  display,
+  now,
+}: {
+  data: DashboardData;
+  display: DisplayConfig;
+  now: Date;
+}) {
+  const finance = data.finance.data;
+  const money = new Intl.NumberFormat(display.locale, {
+    style: "currency",
+    currency: display.currency,
+    maximumFractionDigits: 0,
+  });
+  const bills = [...(finance?.bills ?? [])].sort(
+    (left, right) => Date.parse(left.due) - Date.parse(right.due),
+  );
+  const goal =
+    finance && finance.emergencyTarget > 0
+      ? Math.round((finance.emergencyFund / finance.emergencyTarget) * 100)
+      : 0;
+  const overBudget = finance
+    ? finance.spending > finance.spendingBudget
+    : false;
+
+  return (
+    <DashboardCard
+      id="money"
+      title="Money"
+      icon={DollarSign}
+      source={data.finance}
+      now={now}
+      className="dashboard-card-money"
+    >
+      {finance === null ? (
+        <div className="domain-empty">No data</div>
+      ) : (
+        <div className="dashboard-money-grid">
+          <div>
+            <span>Cash</span>
+            <strong>{money.format(finance.checking)}</strong>
+          </div>
+          <div>
+            <span>Next bills</span>
+            {bills.length ? (
+              bills.slice(0, 2).map((bill) => (
+                <p key={`${bill.title}-${bill.due}`}>
+                  {bill.title} <strong>{money.format(bill.amount)}</strong>
+                </p>
+              ))
+            ) : (
+              <p>No upcoming payments</p>
+            )}
+          </div>
+          <div>
+            <span>Goal</span>
+            <strong>{goal}%</strong>
+            <p>Emergency fund</p>
+          </div>
+          <div>
+            <span>Alerts</span>
+            <strong className={overBudget ? "metric-critical" : "metric-good"}>
+              {overBudget ? "Over budget" : "On track"}
+            </strong>
+          </div>
+        </div>
+      )}
+    </DashboardCard>
+  );
+}
+
+function habitStreak(data: DashboardData, now: Date, timezone: string) {
+  const completed = new Set(
+    (data.habits.data?.habits ?? []).flatMap((habit) =>
+      habit.occurrences
+        .filter((occurrence) => occurrence.completed)
+        .map((occurrence) => occurrence.date),
+    ),
+  );
+  const today = localDateKey(now, timezone);
+  let streak = 0;
+  for (let offset = 0; offset < 366; offset++) {
+    if (!completed.has(dayKeyOffset(now, -offset, timezone))) break;
+    streak++;
+  }
+  return { today, streak };
+}
+
+function HealthPanel({
+  data,
+  display,
+  now,
+}: {
+  data: DashboardData;
+  display: DisplayConfig;
+  now: Date;
+}) {
+  const health = data.health.data as ExtendedHealthState | null;
+  const healthStreak = habitStreak(data, now, display.timezone);
+  const completedThisWeek = (data.habits.data?.habits ?? []).reduce(
+    (total, habit) =>
+      total +
+      habit.occurrences.filter(
+        (occurrence) =>
+          occurrence.completed &&
+          occurrence.date >= dayKeyOffset(now, -6, display.timezone) &&
+          occurrence.date <= healthStreak.today,
+      ).length,
+    0,
+  );
+  const weekLabel = health?.week
+    ? `${health.week.activeDays ?? 0} active days${
+        health.week.steps !== undefined && health.week.goal
+          ? ` · ${health.week.steps.toLocaleString(display.locale)}/${health.week.goal.toLocaleString(display.locale)} steps`
+          : ""
+      }`
+    : `${completedThisWeek} habit check-ins`;
+  const streakDays = health?.streak?.days ?? healthStreak.streak;
+  const streakLabel = health?.streak?.label || "Habit streak";
+
+  return (
+    <DashboardCard
+      id="health"
+      title="Health"
+      icon={HeartPulse}
+      source={data.health}
+      now={now}
+      className="dashboard-card-health"
+    >
+      {health === null ? (
+        <div className="domain-empty">No data</div>
+      ) : (
+        <div className="dashboard-health-grid">
+          <div>
+            <span>Today</span>
+            <strong>
+              {health.steps?.toLocaleString(display.locale) ?? "—"} steps
+            </strong>
+            <p>
+              {health.exerciseMinutes ?? 0} min exercise
+              {health.workout ? ` · ${health.workout}` : ""}
+            </p>
+          </div>
+          <div>
+            <span>This week</span>
+            <strong>{weekLabel}</strong>
+          </div>
+          <div>
+            <span>Streak</span>
+            <strong>
+              {streakDays} {streakDays === 1 ? "day" : "days"}
+            </strong>
+            <p>{streakLabel}</p>
+          </div>
+        </div>
+      )}
+      <Habits data={data} now={now} display={display} />
+    </DashboardCard>
+  );
+}
+
+function SchedulePanel({
+  data,
+  display,
+  now,
+}: {
+  data: DashboardData;
+  display: DisplayConfig;
+  now: Date;
+}) {
+  const events = data.calendar.data?.events ?? [];
+  const format = (value: string) =>
+    new Intl.DateTimeFormat(display.locale, {
+      timeZone: display.timezone,
+      weekday: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(value));
+  const group = (kind: "personal" | "work", label: string) => {
+    const upcoming = events
+      .filter(
+        (event) =>
+          event.calendar === kind &&
+          !event.allDay &&
+          Date.parse(event.end) > now.getTime(),
+      )
+      .sort((left, right) => Date.parse(left.start) - Date.parse(right.start));
+    return (
+      <div className="dashboard-schedule-group">
+        <div className="domain-inline-label">
+          <span>{label}</span>
+          <Feed state={data.calendar} now={now} />
+        </div>
+        {data.calendar.data === null ? (
+          <div className="domain-empty">No data</div>
+        ) : upcoming.length ? (
+          upcoming.slice(0, 3).map((event) => (
+            <div className="domain-list-row" key={`${event.id}-${event.start}`}>
+              <span>{event.title}</span>
+              <strong>{format(event.start)}</strong>
+            </div>
+          ))
+        ) : (
+          <div className="domain-empty">No {kind} events ahead</div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <DashboardCard
+      id="schedule"
+      title="Schedule"
+      icon={CalendarDays}
+      source={data.calendar}
+      now={now}
+      className="dashboard-card-schedule"
+    >
+      <div className="dashboard-schedule-grid">
+        {group("personal", "Personal")}
+        {group("work", "Work")}
+      </div>
+    </DashboardCard>
+  );
+}
+
+function RemindersPanel({ data, now }: { data: DashboardData; now: Date }) {
+  const reminders = [...(data.reminders.data?.items ?? [])].sort(
+    (left, right) => {
+      if (left.completed !== right.completed)
+        return Number(left.completed) - Number(right.completed);
+      return (left.due ?? "").localeCompare(right.due ?? "");
+    },
+  );
+
+  return (
+    <DashboardCard
+      id="reminders"
+      title="Reminders"
+      icon={Bell}
+      source={data.reminders}
+      now={now}
+      className="dashboard-card-reminders"
+    >
+      {data.reminders.data === null ? (
+        <div className="domain-empty">No data</div>
+      ) : reminders.length ? (
+        <div className="dashboard-reminder-list">
+          {reminders.slice(0, 5).map((reminder) => (
+            <div className="domain-list-row" key={reminder.id}>
+              <span>{reminder.title}</span>
+              <strong>{reminder.completed ? "Complete" : "Open"}</strong>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="domain-empty">No upcoming payments</div>
+      )}
+      <Feed state={data.reminders} now={now} />
+    </DashboardCard>
+  );
+}
+
+function DashboardStyles() {
+  return (
+    <style>{`
+      .dashboard-topbar {
+        position: sticky;
+        z-index: 20;
+        top: 0;
+        padding: var(--space-3) var(--space-4);
+        background: color-mix(in srgb, var(--color-canvas) 94%, transparent);
+        backdrop-filter: blur(14px);
+      }
+
+      .dashboard-tabs {
+        display: flex;
+        gap: var(--space-2);
+        padding: var(--space-2) var(--space-4);
+        border-bottom: 1px solid var(--color-border);
+      }
+
+      .dashboard-tab {
+        padding: var(--space-2) var(--space-3);
+        border: 1px solid transparent;
+        border-radius: 0.4rem;
+        background: transparent;
+        color: var(--color-text-muted);
+        cursor: pointer;
+        font: inherit;
+        font-size: var(--type-detail);
+        text-decoration: none;
+      }
+
+      .dashboard-tab[aria-current="page"] {
+        border-color: var(--color-border-strong);
+        background: var(--color-surface-raised);
+        color: var(--color-text);
+      }
+
+      .dashboard-home {
+        grid-template-columns: 1fr;
+        padding: var(--space-3) var(--space-4);
+      }
+
+      .dashboard-card {
+        min-width: 0;
+        overflow: hidden;
+        border: 1px solid var(--color-border);
+        border-radius: 0.5rem;
+        background: var(--color-surface);
+      }
+
+      .dashboard-panel-header,
+      .dashboard-panel-heading,
+      .dashboard-panel-meta {
+        display: flex;
+        align-items: center;
+      }
+
+      .dashboard-panel-header {
+        justify-content: space-between;
+        gap: var(--space-3);
+        padding: var(--space-3) var(--space-4);
+        border-bottom: 1px solid var(--color-border);
+      }
+
+      .dashboard-panel-heading {
+        gap: var(--space-2);
+        min-width: 0;
+      }
+
+      .dashboard-panel-heading svg {
+        width: 1.1rem;
+        height: 1.1rem;
+        color: var(--color-accent);
+      }
+
+      .dashboard-panel-heading h2 {
+        color: var(--color-text);
+        font-size: var(--type-tier-3);
+        font-weight: 600;
+        letter-spacing: 0;
+      }
+
+      .dashboard-panel-meta {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: var(--space-1) var(--space-2);
+        color: var(--color-text-muted);
+        font-size: var(--type-micro);
+      }
+
+      .dashboard-panel-status {
+        color: var(--color-state-caution);
+        font-weight: 600;
+        text-transform: uppercase;
+      }
+
+      .dashboard-panel-body {
+        display: grid;
+        gap: var(--space-3);
+        padding: var(--space-3) var(--space-4);
+      }
+
+      .dashboard-panel-body > .domain-section {
+        margin: calc(var(--space-3) * -1) calc(var(--space-4) * -1)
+          calc(var(--space-3) * -1);
+        border-top: 1px solid var(--color-border);
+      }
+
+      .dashboard-bot-list,
+      .dashboard-reminder-list,
+      .dashboard-schedule-grid,
+      .dashboard-health-grid,
+      .dashboard-money-grid {
+        display: grid;
+        gap: var(--space-2);
+      }
+
+      .dashboard-bot-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--space-3);
+        padding: var(--space-2);
+        border: 1px solid var(--color-border);
+        border-radius: 0.4rem;
+      }
+
+      .dashboard-bot-row.waiting {
+        border-color: var(--color-state-caution);
+        background: color-mix(
+          in srgb,
+          var(--color-state-caution) 10%,
+          transparent
+        );
+      }
+
+      .dashboard-bot-row div {
+        min-width: 0;
+      }
+
+      .dashboard-bot-row p,
+      .dashboard-money-grid p,
+      .dashboard-health-grid p {
+        margin-top: var(--space-1);
+        color: var(--color-text-secondary);
+        font-size: var(--type-detail);
+      }
+
+      .dashboard-bot-row > span,
+      .dashboard-money-grid span,
+      .dashboard-health-grid span {
+        color: var(--color-text-muted);
+        font-size: var(--type-micro);
+        text-transform: uppercase;
+      }
+
+      .dashboard-money-grid,
+      .dashboard-health-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .dashboard-money-grid > div,
+      .dashboard-health-grid > div {
+        min-width: 0;
+        padding: var(--space-2);
+        border: 1px solid var(--color-border);
+        border-radius: 0.4rem;
+      }
+
+      .dashboard-money-grid strong,
+      .dashboard-health-grid strong {
+        display: block;
+        margin-top: var(--space-1);
+      }
+
+      .metric-critical {
+        color: var(--color-state-critical);
+      }
+
+      .dashboard-schedule-group {
+        min-width: 0;
+      }
+
+      .dashboard-schedule-group + .dashboard-schedule-group {
+        padding-top: var(--space-2);
+        border-top: 1px solid var(--color-border);
+      }
+
+      .decisions-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+        padding: var(--space-4);
+        border: 1px dashed var(--color-border-strong);
+        border-radius: 0.5rem;
+        color: var(--color-text-secondary);
+        text-decoration: none;
+      }
+
+      @media (min-width: 640px) {
+        .dashboard-home {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .dashboard-card-bots,
+        .dashboard-card-health,
+        .dashboard-card-systems {
+          grid-column: span 2;
+        }
+
+        .dashboard-schedule-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .dashboard-schedule-group + .dashboard-schedule-group {
+          padding-top: 0;
+          padding-left: var(--space-3);
+          border-top: 0;
+          border-left: 1px solid var(--color-border);
+        }
+      }
+
+      @media (min-width: 1024px) {
+        .dashboard-home {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .dashboard-card-bots,
+        .dashboard-card-health,
+        .dashboard-card-systems {
+          grid-column: span 1;
+        }
+      }
+    `}</style>
+  );
+}
 
 function LiveDashboard({
   initial,
@@ -83,19 +727,20 @@ function LiveDashboard({
     (state) => state.source === "real" && state.data === null,
   ).length;
   const sourceProblems = visibleFeeds.some(
-    (d) => d.status !== "ready" || isStale(d.lastSuccess, clockNow, d.refreshMs),
+    (d) =>
+      d.status !== "ready" || isStale(d.lastSuccess, clockNow, d.refreshMs),
   );
-  const status =
-    critical
-      ? "SYSTEM ATTENTION"
-      : connectionError || sourceProblems
-        ? "FEED ATTENTION"
-        : "SYSTEMS NORMAL";
+  const status = critical
+    ? "SYSTEM ATTENTION"
+    : connectionError || sourceProblems
+      ? "FEED ATTENTION"
+      : "SYSTEMS NORMAL";
   return (
     <main
       className={`dashboard mode-${mode} ${display.pixelShift ? `pixel-shift-${rotation % 4}` : ""}`}
     >
-      <header className="header">
+      <DashboardStyles />
+      <header className="header dashboard-topbar" data-sticky="true">
         <Clock display={display} initialTime={renderedAt} />
         <div className="header-right">
           <Weather data={data} now={clockNow} />
@@ -126,33 +771,98 @@ function LiveDashboard({
           </div>
         </div>
       </header>
+      <nav
+        className="dashboard-tabs"
+        role="tablist"
+        aria-label="Dashboard views"
+      >
+        <button
+          type="button"
+          className="dashboard-tab"
+          role="tab"
+          aria-selected="true"
+        >
+          Home
+        </button>
+        <a className="dashboard-tab" href="/decisions" role="tab">
+          Decisions
+        </a>
+      </nav>
       <SystemHistoryContext.Provider value={systemHistory}>
-        <div className="domain-columns">
-          {COLUMNS.map((column) => (
-            <PanelBoundary key={column.id} name={column.title}>
-              <DomainColumn
-                title={column.title}
-                subtitle={column.subtitle}
-                icon={column.icon}
-                className={column.className}
-              >
-                {column.widgetIds.map((id) => {
-                  const widget = WIDGETS[id];
-                  if (!widget) return null;
-                  const Widget = widget.Component;
-                  return (
-                    <Widget
-                      key={id}
-                      data={data}
-                      now={clockNow}
-                      display={display}
-                      mode={mode}
-                    />
-                  );
-                })}
-              </DomainColumn>
-            </PanelBoundary>
-          ))}
+        <div
+          className="domain-columns dashboard-home"
+          data-layout="single-column"
+          data-breakpoint="640"
+        >
+          <PanelBoundary name="Bots">
+            <BotsPanel data={data} now={clockNow} />
+          </PanelBoundary>
+          <PanelBoundary name="Money">
+            <MoneyPanel data={data} display={display} now={clockNow} />
+          </PanelBoundary>
+          <PanelBoundary name="Health">
+            <HealthPanel data={data} display={display} now={clockNow} />
+          </PanelBoundary>
+          <PanelBoundary name="Schedule">
+            <SchedulePanel data={data} display={display} now={clockNow} />
+          </PanelBoundary>
+          <PanelBoundary name="Reminders">
+            <RemindersPanel data={data} now={clockNow} />
+          </PanelBoundary>
+          <PanelBoundary name="GitHub">
+            <DashboardCard
+              id="github"
+              title="GitHub"
+              icon={Code2}
+              source={data.build}
+              now={clockNow}
+              className="dashboard-card-github"
+            >
+              <Build data={data} now={clockNow} />
+            </DashboardCard>
+          </PanelBoundary>
+          <PanelBoundary name="Goals">
+            <DashboardCard
+              id="goals"
+              title="Goals"
+              icon={Target}
+              source={data.goals}
+              now={clockNow}
+              className="dashboard-card-goals"
+            >
+              <Goals data={data} now={clockNow} />
+            </DashboardCard>
+          </PanelBoundary>
+          <PanelBoundary name="Projects">
+            <DashboardCard
+              id="projects"
+              title="Projects"
+              icon={Folder}
+              source={data.goals}
+              now={clockNow}
+              className="dashboard-card-projects"
+            >
+              <Projects data={data} now={clockNow} />
+            </DashboardCard>
+          </PanelBoundary>
+          <PanelBoundary name="Systems">
+            <DashboardCard
+              id="systems"
+              title="Systems"
+              icon={Server}
+              source={data.systems}
+              now={clockNow}
+              className="dashboard-card-systems"
+            >
+              <Systems data={data} now={clockNow} />
+            </DashboardCard>
+          </PanelBoundary>
+          <PanelBoundary name="Decisions">
+            <a className="decisions-placeholder" href="/decisions">
+              <span>Decisions coming from feat/decisions</span>
+              <ArrowRight aria-hidden="true" />
+            </a>
+          </PanelBoundary>
         </div>
       </SystemHistoryContext.Provider>
       <footer className="footer">
@@ -178,11 +888,8 @@ function LiveDashboard({
         <div className="feed-summary">
           <Network />
           <span>
-            {live} LIVE <span className="footer-divider">/</span>{" "}
-            {demoCount}
-            {noData > 0
-              ? ` DEMO / ${noData} NO DATA FEEDS`
-              : " DEMO FEEDS"}
+            {live} LIVE <span className="footer-divider">/</span> {demoCount}
+            {noData > 0 ? ` DEMO / ${noData} NO DATA FEEDS` : " DEMO FEEDS"}
           </span>
           <span className="footer-divider">·</span>
           <span>AUTOMATIC REFRESH</span>
