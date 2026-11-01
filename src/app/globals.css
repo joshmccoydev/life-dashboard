@@ -1,17 +1,19 @@
 @import "tailwindcss";
 
-* {
-  box-sizing: border-box;
-}
-
 html,
 body {
   min-height: 100%;
 }
 
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   line-height: 1.2;
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
 }
 
 h1,
@@ -22,12 +24,18 @@ p {
   margin: 0;
 }
 
+img,
+svg {
+  max-width: 100%;
+}
+
 svg {
   flex-shrink: 0;
 }
 
 body main.dashboard {
-  max-width: none;
+  max-width: 1680px;
+  margin-inline: auto;
   height: auto;
   min-height: 100svh;
   overflow: visible;
@@ -240,6 +248,10 @@ body main.dashboard {
   grid-template-columns: 1fr;
   align-content: start;
   gap: var(--space-3);
+}
+
+.domain-columns > * {
+  min-width: 0;
 }
 
 .domain-column {
@@ -951,6 +963,12 @@ body main.dashboard {
   font-size: var(--type-detail);
 }
 
+.dashboard-card,
+.dashboard-panel-meta {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .mode-night .work-column,
 .mode-night .digital-column {
   opacity: var(--auto-dim-night);
@@ -977,6 +995,18 @@ body main.dashboard {
   transform: translate(0, -1px);
 }
 
+.dashboard-tabs {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.dashboard-tab {
+  flex: 0 0 auto;
+  min-height: 44px;
+}
+
 @media (max-height: 800px) and (min-width: 1101px) {
   .dashboard .personal-column .domain-column-content > .domain-section:last-child .domain-progress-list,
   .dashboard .work-column .domain-section.domain-projects .domain-project-list {
@@ -986,7 +1016,7 @@ body main.dashboard {
 
 @media (min-width: 1024px) {
   body main.dashboard {
-    max-width: calc(100svh * 16 / 9);
+    max-width: min(1680px, calc(100svh * 16 / 9));
     height: 100svh;
     min-height: 0;
     overflow: hidden;
@@ -1045,6 +1075,18 @@ body main.dashboard {
   }
 }
 
+@media (min-width: 640px) {
+  .domain-columns.dashboard-home {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .domain-columns.dashboard-home {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -1053,5 +1095,44 @@ body main.dashboard {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+@media (max-width: 639px) {
+  .header,
+  .dashboard-tabs,
+  .domain-columns {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .header,
+  .weather {
+    flex-wrap: wrap;
+  }
+
+  .weather-main {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .weather-main p,
+  .weather-main > span {
+    white-space: normal;
+  }
+
+  .weather-feed {
+    align-items: flex-start;
+  }
+
+  .feed-summary {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  .feed-summary > * {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 }

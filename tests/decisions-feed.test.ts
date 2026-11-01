@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { __resetAccessCertCache } from "@/lib/access-auth";
 import { GET } from "@/app/api/decisions/route";
 import {
   FEED_DOMAINS,
@@ -14,6 +15,15 @@ import * as produceFeeds from "../scripts/produce-feeds.ts";
 const NOW = new Date("2026-11-01T16:30:00.000Z");
 const GENERATED_AT = "2026-11-01T16:30:00.000Z";
 const UPDATED_AT = "2026-11-01T16:29:00.000Z";
+const ACCESS_TEAM_DOMAIN =
+  "https://twilight-wildflower-b227.cloudflareaccess.com";
+const ACCESS_AUD =
+  "664b2ba4711405313275fbc48ce565c87fa257899dd5ee5e93679eccff36d4c7";
+const ACCESS_CERTS_URL = `${ACCESS_TEAM_DOMAIN}/cdn-cgi/access/certs`;
+const ALLOWED_EMAIL = "hi@joshmccoy.dev";
+const EXPIRES_AT = 4_102_444_800;
+
+type AccessJwk = JsonWebKey & { kid: string };
 
 type SyntheticCard = {
   id: string;
@@ -135,6 +145,82 @@ function restoreEnvironment(
   });
 }
 
+async function generateAccessKeyPair(): Promise<CryptoKeyPair> {
+  return (await crypto.subtle.generateKey(
+    {
+      name: "RSASSA-PKCS1-v1_5",
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: "SHA-256",
+    },
+    true,
+    ["sign", "verify"],
+  )) as CryptoKeyPair;
+}
+
+function base64UrlEncode(value: string | ArrayBuffer): string {
+  const bytes =
+    typeof value === "string"
+      ? new TextEncoder().encode(value)
+      : new Uint8Array(value);
+  let binary = "";
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+async function makeAccessToken(keys: CryptoKeyPair): Promise<string> {
+  const encodedHeader = base64UrlEncode(
+    JSON.stringify({ alg: "RS256", kid: "k1", typ: "JWT" }),
+  );
+  const encodedPayload = base64UrlEncode(
+    JSON.stringify({
+      iss: ACCESS_TEAM_DOMAIN,
+      aud: ACCESS_AUD,
+      email: ALLOWED_EMAIL,
+      exp: EXPIRES_AT,
+    }),
+  );
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    keys.privateKey,
+    new TextEncoder().encode(signingInput),
+  );
+
+  return `${signingInput}.${base64UrlEncode(signature)}`;
+}
+
+async function installAccessFixture(t: TestContext): Promise<string> {
+  const signingKeys = await generateAccessKeyPair();
+  const trustedJwk: AccessJwk = {
+    ...(await crypto.subtle.exportKey("jwk", signingKeys.publicKey)),
+    kid: "k1",
+  };
+  const originalFetch = globalThis.fetch;
+
+  __resetAccessCertCache();
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    assert.equal(String(input), ACCESS_CERTS_URL);
+    return new Response(JSON.stringify({ keys: [trustedJwk] }), {
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    __resetAccessCertCache();
+  });
+
+  return makeAccessToken(signingKeys);
+}
+
 test("FEED_DOMAINS includes decisions and mergeFeeds keeps a valid decisions entry", () => {
   assert.ok(
     (FEED_DOMAINS as readonly string[]).includes("decisions"),
@@ -207,17 +293,13 @@ test("buildDecisions tolerates a missing synthetic vault", async (t) => {
 
 test("decisions GET returns the KV decisions snapshot when disk has no cards", async (t) => {
   const vaultDir = await temporaryDirectory(t, "decisions-feed-route-");
-  restoreEnvironment(t, [
-    "DECISIONS_VAULT",
-    "DECISIONS_REMINDERS",
-    "DECISIONS_TOKEN",
-  ]);
+  restoreEnvironment(t, ["DECISIONS_VAULT", "DECISIONS_REMINDERS"]);
   process.env.DECISIONS_VAULT = vaultDir;
   process.env.DECISIONS_REMINDERS = path.join(
     vaultDir,
     "missing-reminders.md",
   );
-  process.env.DECISIONS_TOKEN = "synthetic-decisions-token";
+  const accessToken = await installAccessFixture(t);
 
   const kvSnapshot = {
     generatedAt: GENERATED_AT,
@@ -252,9 +334,9 @@ test("decisions GET returns the KV decisions snapshot when disk has no cards", a
   ) => Promise<Response>;
 
   const response = await get(
-    new Request(
-      "https://example.test/api/decisions?t=synthetic-decisions-token",
-    ),
+    new Request("https://example.test/api/decisions", {
+      headers: { "cf-access-jwt-assertion": accessToken },
+    }),
     context,
   );
 
@@ -264,10 +346,7 @@ test("decisions GET returns the KV decisions snapshot when disk has no cards", a
   assert.equal(body.count, 2);
 });
 
-test("decisions GET without a token returns 401", async (t) => {
-  restoreEnvironment(t, ["DECISIONS_TOKEN"]);
-  process.env.DECISIONS_TOKEN = "synthetic-decisions-token";
-
+test("decisions GET without Access authorization returns 401", async () => {
   const response = await GET(
     new Request("https://example.test/api/decisions"),
   );
