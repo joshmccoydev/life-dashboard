@@ -5,6 +5,7 @@
   "assets": {
     "directory": ".open-next/assets"
   },
+  "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
   "kv_namespaces": [
     {
