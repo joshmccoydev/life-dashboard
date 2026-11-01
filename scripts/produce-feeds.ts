@@ -44,6 +44,7 @@ type FeedPaths = {
 
 type ReadFile = (path: string) => string | Buffer;
 type RunCommand = (cmd: string, args: string[]) => string;
+type Stat = (path: string) => { mtime: Date };
 type StatusKey =
   "updated" | "working_on" | "last_done" | "next_up" | "needs_josh";
 
@@ -234,6 +235,7 @@ function countLines(markdown: string): number {
 export function buildBots(
   paths: Pick<FeedPaths, "status" | "board">,
   readFile: ReadFile = fs.readFileSync,
+  stat: Stat = fs.statSync,
 ): Entry {
   let statusMarkdown: string;
   try {
@@ -247,6 +249,13 @@ export function buildBots(
     };
   }
 
+  let updatedAt: string | null = null;
+  try {
+    updatedAt = stat(paths.status).mtime.toISOString();
+  } catch {
+    updatedAt = null;
+  }
+
   let board: number | null = null;
   const errors: string[] = [];
   try {
@@ -257,7 +266,7 @@ export function buildBots(
 
   return {
     data: { bots: parseStatus(statusMarkdown), board },
-    updatedAt: null,
+    updatedAt,
     source: "box:status",
     ...(errors.length > 0 ? { error: errors.join("; ") } : {}),
   };
@@ -339,7 +348,19 @@ export function buildApple(
   readFile: ReadFile = fs.readFileSync,
 ): Entry {
   try {
-    return jsonEntry(paths.apple, "mac", readFile(paths.apple));
+    const entry = jsonEntry(paths.apple, "mac", readFile(paths.apple));
+    if (entry.error) return entry;
+
+    const parsed = isRecord(entry.data) ? entry.data : {};
+    return {
+      ...entry,
+      data: {
+        calendar: parsed.calendar ?? null,
+        reminders: parsed.reminders ?? null,
+        habits: parsed.habits ?? null,
+        goals: parsed.goals ?? null,
+      },
+    };
   } catch {
     return {
       data: null,
@@ -382,6 +403,31 @@ export function buildSnapshot(
     health: readJsonEntry(paths.health, "box:arnold", readFile),
     host: buildHost({ run, uptime, loadavg, now }),
     apple: buildApple(paths, readFile),
+  };
+}
+
+export function toKvPayload(snapshot: Snapshot): Record<
+  keyof Snapshot,
+  {
+    data: unknown;
+    updatedAt: string | null;
+    stale: boolean;
+    source: "box" | "mac";
+  }
+> {
+  const entry = (current: Entry, source: "box" | "mac") => ({
+    data: current.data,
+    updatedAt: current.updatedAt,
+    stale: false,
+    source,
+  });
+
+  return {
+    bots: entry(snapshot.bots, "box"),
+    money: entry(snapshot.money, "box"),
+    health: entry(snapshot.health, "box"),
+    host: entry(snapshot.host, "box"),
+    apple: entry(snapshot.apple, "mac"),
   };
 }
 
@@ -452,7 +498,7 @@ export function main(argv: string[]): void {
   const tempFile = path.join(tempDirectory, "feeds.json");
 
   try {
-    fs.writeFileSync(tempFile, JSON.stringify(snapshot), {
+    fs.writeFileSync(tempFile, JSON.stringify(toKvPayload(snapshot)), {
       encoding: "utf8",
       mode: 0o600,
     });
