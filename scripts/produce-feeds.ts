@@ -412,15 +412,23 @@ export function toKvPayload(snapshot: Snapshot): Record<
     data: unknown;
     updatedAt: string | null;
     stale: boolean;
-    source: "box" | "mac";
+    source: "box" | "mac" | null;
   }
 > {
-  const entry = (current: Entry, source: "box" | "mac") => ({
-    data: current.data,
-    updatedAt: current.updatedAt,
-    stale: false,
-    source,
-  });
+  const entry = (current: Entry, source: "box" | "mac") =>
+    current.data === null
+      ? {
+          data: null,
+          updatedAt: null,
+          stale: false,
+          source: null,
+        }
+      : {
+          data: current.data,
+          updatedAt: current.updatedAt,
+          stale: false,
+          source,
+        };
 
   return {
     bots: entry(snapshot.bots, "box"),
