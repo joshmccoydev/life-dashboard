@@ -14,10 +14,13 @@ export function evaluateAlerts(
   const alerts: Alert[] = [];
   const time = now.getTime();
   const systems = data.systems.data;
+  const systemMetrics = systems
+    ? [systems.machine, ...(systems.endpoints ?? [])].filter(
+        (metric) => metric != null,
+      )
+    : [];
   for (const s of includeDemo || data.systems.source === "real"
-    ? systems
-      ? [systems.machine, ...systems.endpoints]
-      : []
+    ? systemMetrics
     : []) {
     if (s.status === "offline")
       alerts.push({
