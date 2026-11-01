@@ -1,5 +1,7 @@
 import type { CSSProperties } from "react";
-import { buildSnapshot, checkToken } from "@/lib/decisions";
+import { headers } from "next/headers";
+import { verifyAccessJwt } from "@/lib/access-auth";
+import { buildSnapshot } from "@/lib/decisions";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +37,10 @@ const styles = {
   },
   container: {
     width: "100%",
-    maxWidth: 640,
+    maxWidth: 720,
+    padding: 16,
+    boxSizing: "border-box",
+    overflowWrap: "anywhere",
     margin: "0 auto",
   },
   header: {
@@ -153,8 +158,8 @@ const styles = {
     fontSize: "1rem",
   },
   actions: {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    display: "flex",
+    flexWrap: "wrap",
     gap: 8,
   },
   button: {
@@ -170,15 +175,17 @@ const styles = {
   },
 } satisfies Record<string, CSSProperties>;
 
-export default async function DecisionsPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const query = await searchParams;
-  const candidate = Array.isArray(query.t) ? query.t[0] : query.t;
+export default async function DecisionsPage() {
+  const now = new Date();
+  const access = await verifyAccessJwt(
+    (await headers()).get("cf-access-jwt-assertion"),
+    {
+      fetchImpl: globalThis.fetch,
+      now: now.getTime(),
+    },
+  );
 
-  if (!candidate || !checkToken(candidate, process.env.DECISIONS_TOKEN)) {
+  if (!access.ok) {
     return "unauthorized";
   }
 
@@ -186,7 +193,7 @@ export default async function DecisionsPage({
     vaultDir: process.env.DECISIONS_VAULT ?? "/workspace/vault",
     remindersFile:
       process.env.DECISIONS_REMINDERS ?? "/workspace/reminders-queue.md",
-    now: new Date(),
+    now,
   });
 
   return (
@@ -215,7 +222,6 @@ export default async function DecisionsPage({
                 style={styles.card}
               >
                 <input type="hidden" name="id" value={card.id} />
-                <input type="hidden" name="t" value={candidate} />
 
                 <div style={styles.meta}>
                   <span style={styles.bot}>{card.bot || "unknown bot"}</span>
