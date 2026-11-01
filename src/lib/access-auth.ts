@@ -4,6 +4,7 @@ const ACCESS_AUDIENCE =
   "664b2ba4711405313275fbc48ce565c87fa257899dd5ee5e93679eccff36d4c7";
 const ALLOWED_EMAIL = "hi@joshmccoy.dev";
 const ACCESS_CERTS_URL = `${ACCESS_TEAM_DOMAIN}/cdn-cgi/access/certs`;
+export const FORCED_REFRESH_COOLDOWN_MS = 60_000;
 const RS256 = {
   name: "RSASSA-PKCS1-v1_5",
   hash: "SHA-256",
@@ -37,9 +38,11 @@ type DecodedJwt = {
 };
 
 let certificateCache: Promise<Map<string, JwkWithId>> | null = null;
+let lastForcedRefreshAt: number | null = null;
 
 export function __resetAccessCertCache(): void {
   certificateCache = null;
+  lastForcedRefreshAt = null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -155,11 +158,20 @@ function getAccessKeys(
 async function findSigningKey(
   kid: string,
   fetchImpl: typeof fetch,
+  now: number,
 ): Promise<JsonWebKey | null> {
   let keys = await getAccessKeys(fetchImpl, false);
   let key = keys.get(kid);
 
   if (!key) {
+    if (
+      lastForcedRefreshAt !== null &&
+      now - lastForcedRefreshAt < FORCED_REFRESH_COOLDOWN_MS
+    ) {
+      return null;
+    }
+
+    lastForcedRefreshAt = now;
     keys = await getAccessKeys(fetchImpl, true);
     key = keys.get(kid);
   }
@@ -212,6 +224,7 @@ export async function verifyAccessJwt(
     const jwk = await findSigningKey(
       jwt.header.kid as string,
       options.fetchImpl,
+      options.now,
     );
     if (!jwk) return { ok: false, reason: "signature" };
 
