@@ -472,7 +472,21 @@ export function buildSnapshot(
   const uptime = opts.uptime ?? os.uptime;
   const loadavg = opts.loadavg ?? os.loadavg;
   const now = opts.now ?? new Date();
-  const money = readJsonEntry(paths.money, "box:buffett", readFile);
+  let money = readJsonEntry(paths.money, "box:buffett", readFile);
+  if (money.data !== null) {
+    const cash = isRecord(money.data) ? money.data.cash_on_hand : null;
+    const hasValidCash =
+      isRecord(cash) && finiteNumber(cash.amount) !== null;
+    const hasBills =
+      isRecord(money.data) && Array.isArray(money.data.next_bills);
+    if (!hasValidCash || !hasBills) {
+      money = {
+        ...money,
+        data: null,
+        error: "money shape invalid",
+      };
+    }
+  }
   const health = readJsonEntry(paths.health, "box:arnold", readFile);
 
   return {
@@ -712,7 +726,13 @@ export function main(argv: string[], deps?: KvDeps): number {
     return finish(1);
   }
 
-  kvPut(JSON.stringify(merged.payload));
+  try {
+    kvPut(JSON.stringify(merged.payload));
+  } catch {
+    out(JSON.stringify(summarize(snapshot)));
+    out(JSON.stringify({ skipped: "publish", reason: "kv write failed" }));
+    return finish(1);
+  }
   out(JSON.stringify(summarize(snapshot)));
   out(
     JSON.stringify({
