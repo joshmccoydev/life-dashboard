@@ -19,6 +19,13 @@ export type Snapshot = {
   apple: Entry;
 };
 
+export type KvDeps = {
+  kvGet: () => string | null;
+  kvPut: (json: string) => void;
+  build?: () => Snapshot;
+  out?: (line: string) => void;
+};
+
 export const MONEY_ALLOWED_KEYS = [
   "cashOnHand",
   "billsDueTotal",
@@ -580,47 +587,142 @@ export function shouldPublish(snapshot: Snapshot): {
   return { ok: failed.length === 0, failed };
 }
 
-function printSummary(snapshot: Snapshot): void {
-  process.stdout.write(`${JSON.stringify(summarize(snapshot))}\n`);
+const FEED_DOMAINS = ["bots", "money", "health", "host", "apple"] as const;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
-export function main(argv: string[]): void {
-  const snapshot = buildSnapshot();
-  if (argv.includes("--dry-run")) {
-    printSummary(snapshot);
-    return;
+export function mergeForPublish(
+  existing: unknown,
+  snapshot: Snapshot,
+): {
+  payload: Record<string, unknown>;
+  published: string[];
+  kept: string[];
+} {
+  const payload: Record<string, unknown> = isPlainObject(existing)
+    ? { ...existing }
+    : {};
+  const current = toKvPayload(snapshot);
+  const published: string[] = [];
+  const kept: string[] = [];
+
+  for (const domain of FEED_DOMAINS) {
+    if (snapshot[domain].data !== null) {
+      payload[domain] = current[domain];
+      published.push(domain);
+    } else {
+      kept.push(domain);
+    }
   }
 
-  const publication = shouldPublish(snapshot);
-  if (!publication.ok) {
-    printSummary(snapshot);
-    process.stdout.write(
-      `${JSON.stringify({ skipped: "publish", failed: publication.failed })}\n`,
+  return { payload, published, kept };
+}
+
+function defaultKvGet(): string | null {
+  try {
+    return execFileSync(
+      "npx",
+      [
+        "wrangler",
+        "kv",
+        "key",
+        "get",
+        "feeds",
+        "--binding",
+        "FEEDS_KV",
+        "--remote",
+        "--text",
+      ],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
     );
-    process.exitCode = 1;
-    return;
+  } catch (error) {
+    const output =
+      error !== null && typeof error === "object"
+        ? [
+            "stdout" in error ? String(error.stdout) : "",
+            "stderr" in error ? String(error.stderr) : "",
+          ].join("\n")
+        : String(error);
+    if (output.toLowerCase().includes("not found")) return null;
+    throw error;
   }
+}
 
+function defaultKvPut(json: string): void {
   const tempDirectory = fs.mkdtempSync(
     path.join(os.tmpdir(), "life-dash-feeds-"),
   );
   const tempFile = path.join(tempDirectory, "feeds.json");
 
   try {
-    fs.writeFileSync(tempFile, JSON.stringify(toKvPayload(snapshot)), {
-      encoding: "utf8",
-      mode: 0o600,
-    });
+    fs.writeFileSync(tempFile, json, { encoding: "utf8", mode: 0o600 });
     execFileSync("npx", planKvPut(tempFile), {
       stdio: ["ignore", "pipe", "pipe"],
     });
   } finally {
     fs.rmSync(tempDirectory, { recursive: true, force: true });
   }
+}
 
-  printSummary(snapshot);
+export function main(argv: string[], deps?: KvDeps): number {
+  const snapshot = (deps?.build ?? buildSnapshot)();
+  const out =
+    deps?.out ?? ((line: string) => process.stdout.write(`${line}\n`));
+  const finish = (code: number): number => {
+    process.exitCode = code;
+    return code;
+  };
+
+  if (argv.includes("--dry-run")) {
+    out(JSON.stringify(summarize(snapshot)));
+    return finish(0);
+  }
+
+  const kvGet = deps?.kvGet ?? defaultKvGet;
+  const kvPut = deps?.kvPut ?? defaultKvPut;
+  let existingText: string | null;
+  try {
+    existingText = kvGet();
+  } catch {
+    out(JSON.stringify(summarize(snapshot)));
+    out(JSON.stringify({ skipped: "publish", reason: "kv read failed" }));
+    return finish(1);
+  }
+
+  let existing: unknown = {};
+  if (existingText !== null) {
+    try {
+      existing = JSON.parse(existingText);
+    } catch {
+      existing = {};
+    }
+  }
+
+  const merged = mergeForPublish(existing, snapshot);
+  if (merged.published.length === 0) {
+    out(JSON.stringify(summarize(snapshot)));
+    out(JSON.stringify({ skipped: "publish", published: [] }));
+    return finish(1);
+  }
+
+  kvPut(JSON.stringify(merged.payload));
+  out(JSON.stringify(summarize(snapshot)));
+  out(
+    JSON.stringify({
+      published: merged.published,
+      kept: merged.kept,
+    }),
+  );
+  return finish(0);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main(process.argv.slice(2));
+  process.exitCode = main(process.argv.slice(2));
 }
