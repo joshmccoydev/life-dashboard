@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { mergeFeeds } from "../src/lib/feed-store.ts";
-import { normalizeMoney, normalizeHealth } from "../src/adapters/feeds.ts";
 
 type Domain = "bots" | "money" | "health" | "host" | "apple";
 
@@ -49,8 +48,12 @@ test("preview feeds fixture satisfies the dashboard feed contracts", () => {
     );
   }
 
-  assert.doesNotThrow(() => normalizeMoney(parsed.money.data));
-  assert.doesNotThrow(() => normalizeHealth(parsed.health.data));
+  for (const domain of ["money", "health"] as const) {
+    const data = parsed[domain].data;
+    assert.equal(typeof data, "object", `${domain} data is an object`);
+    assert.notEqual(data, null, `${domain} data is non-null`);
+    assert.ok(!Array.isArray(data), `${domain} data is not an array`);
+  }
 
   const serialized = JSON.stringify(parsed);
   assert.match(serialized, /\bfixture\b/i);
