@@ -308,16 +308,16 @@ async function dashboardFromLiveFeeds(
 
 export async function GET(
   request: Request,
-  dependencies: RouteDependencies = {},
+  context?: { params?: Promise<unknown> } & Partial<RouteDependencies>
 ): Promise<Response> {
   try {
     const demo = new URL(request.url).searchParams.get("demo") === "true";
-    const now = dependencies.now?.() ?? new Date();
+    const now = context?.now?.() ?? new Date();
     return Response.json(
       {
         data: demo
           ? await getDemoDashboard()
-          : await dashboardFromLiveFeeds(dependencies),
+          : await dashboardFromLiveFeeds(context ?? {}),
         serverTime: now.toISOString(),
       },
       { headers: { "Cache-Control": "no-store" } },
