@@ -63,7 +63,7 @@ test("await buildSnapshot resolves to a plain snapshot with decisions", async (t
   await syntheticDecisionsEnvironment(t);
 
   const result: unknown = await withinThreeSeconds(
-    buildSnapshot(),
+    Promise.resolve(buildSnapshot()),
     "buildSnapshot",
   );
 
@@ -82,12 +82,13 @@ test("main dry-run resolves with the default build", async (t) => {
   await syntheticDecisionsEnvironment(t);
 
   const result: unknown = await withinThreeSeconds(
-    main(["--dry-run"], {
-      build: undefined,
-      kvGet: async () => null,
-      kvPut: async () => {},
-      out: () => {},
-    }),
+    Promise.resolve(
+      main(["--dry-run"], {
+        kvGet: () => null,
+        kvPut: () => {},
+        out: () => {},
+      }),
+    ),
     "main dry-run",
   );
 
