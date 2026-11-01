@@ -120,25 +120,29 @@ test("readJsonEntry reports invalid JSON without throwing", () => {
   assert.ok(entry.error);
 });
 
-test("buildBots keeps parsed bots and notes a missing board", () => {
+test("buildBots parses Status without Board.md", () => {
   const status = [
     "## Buffett",
     "updated: 2026-10-31T08:00:00.000Z",
     "working_on: Reviewing filings",
   ].join("\n");
+  const statusMtime = new Date("2026-10-31T12:00:00.000Z");
+  const now = new Date("2026-10-31T12:01:00.000Z");
   const entry = buildBots(
     PATHS,
     inlineReadFile({
       [PATHS.status]: status,
     }),
+    () => ({ mtime: statusMtime }),
+    now,
   );
 
   assert.equal(entry.source, "box:status");
+  assert.equal(entry.updatedAt, statusMtime.toISOString());
   assert.deepEqual(entry.data, {
     bots: parseStatus(status),
-    board: null,
   });
-  assert.match(entry.error ?? "", /board missing/i);
+  assert.equal(entry.error, undefined);
 });
 
 test("buildHost parses uptime, disk, and crontab output", () => {
@@ -207,6 +211,7 @@ test("buildApple marks a missing apple export as not wired", () => {
     data: null,
     updatedAt: null,
     source: "mac:not-wired",
+    note: "not connected",
   });
 });
 
