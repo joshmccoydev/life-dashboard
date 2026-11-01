@@ -1,0 +1,106 @@
+{
+  "bots": {
+    "data": [
+      {
+        "bot": "Fixture bot",
+        "name": "Fixture bot",
+        "status": "running",
+        "detail": "Fixture task in progress"
+      },
+      {
+        "bot": "Fixture review bot",
+        "name": "Fixture review bot",
+        "status": "waiting",
+        "detail": "Waiting on Fixture review"
+      }
+    ],
+    "updatedAt": "2026-11-01T18:00:00.000Z",
+    "stale": false,
+    "source": "box"
+  },
+  "money": {
+    "data": {
+      "checking": 2500,
+      "savings": 12000,
+      "emergencyFund": 15000,
+      "emergencyTarget": 20000,
+      "payday": "2026-11-06T15:00:00.000Z",
+      "spending": 850,
+      "spendingBudget": 1000,
+      "investments": 50000,
+      "investmentChange": 2500,
+      "bills": [
+        {
+          "title": "Fixture utility bill",
+          "amount": 100,
+          "due": "2026-11-03T15:00:00.000Z"
+        }
+      ]
+    },
+    "updatedAt": "2026-11-01T18:00:00.000Z",
+    "stale": false,
+    "source": "box"
+  },
+  "health": {
+    "data": {
+      "date": "2026-11-01",
+      "importedAt": "2026-11-01T18:00:00.000Z",
+      "syncedAt": "2026-11-01T18:00:00.000Z",
+      "sampledAt": "2026-11-01T18:00:00.000Z",
+      "activeEnergy": 500,
+      "stepSource": "Fixture Health",
+      "steps": 8000,
+      "stepGoal": 10000,
+      "sleepMinutes": 480,
+      "activityPercent": 75,
+      "exerciseMinutes": 30,
+      "exerciseGoal": 30,
+      "standHours": 10,
+      "standGoal": 12,
+      "workout": "Fixture walk, 30 min"
+    },
+    "updatedAt": "2026-11-01T18:00:00.000Z",
+    "stale": false,
+    "source": "mac"
+  },
+  "host": {
+    "data": {
+      "uptimeSec": 86400,
+      "cpuPct": 20,
+      "memPct": 40,
+      "diskPct": 50
+    },
+    "updatedAt": "2026-11-01T18:00:00.000Z",
+    "stale": false,
+    "source": "box"
+  },
+  "apple": {
+    "data": {
+      "events": [
+        {
+          "id": "fixture-event",
+          "title": "Fixture planning",
+          "start": "2026-11-02T16:00:00.000Z",
+          "end": "2026-11-02T17:00:00.000Z",
+          "calendar": "personal",
+          "calendarName": "Fixture calendar",
+          "location": "Fixture room"
+        }
+      ],
+      "reminders": [
+        {
+          "id": "fixture-reminder",
+          "title": "Fixture reminder",
+          "due": "2026-11-03T17:00:00.000Z",
+          "completed": false,
+          "listName": "Fixture list",
+          "notes": "Fixture note",
+          "dashboardRole": "ordinary"
+        }
+      ]
+    },
+    "updatedAt": "2026-11-01T18:00:00.000Z",
+    "stale": false,
+    "source": "mac"
+  }
+}
