@@ -18,6 +18,22 @@ export type Snapshot = {
   apple: Entry;
 };
 
+export const MONEY_ALLOWED_KEYS = [
+  "cashOnHand",
+  "billsDueTotal",
+  "billsDueCount",
+  "depositTarget",
+  "status",
+] as const;
+
+export type MoneySummary = {
+  cashOnHand: number | null;
+  billsDueTotal: number | null;
+  billsDueCount: number;
+  depositTarget: number | null;
+  status: "ok" | "alert" | "unknown";
+};
+
 type FeedPaths = {
   status: string;
   board: string;
@@ -50,6 +66,57 @@ export const DEFAULT_PATHS: FeedPaths = {
 
 function toText(contents: string | Buffer): string {
   return typeof contents === "string" ? contents : contents.toString("utf8");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function billAmount(value: unknown): number | null {
+  const amount = isRecord(value) ? value.amount : value;
+  if (typeof amount === "number") {
+    return Number.isFinite(amount) ? amount : null;
+  }
+  if (typeof amount !== "string" || amount.trim() === "") return null;
+
+  const parsed = Number(amount);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function summarizeMoney(raw: unknown): MoneySummary {
+  const source = isRecord(raw) ? raw : null;
+  const cash = source?.cash_on_hand;
+  const bills = source?.next_bills;
+  const depositGoal = source?.deposit_goal;
+  const alerts = source?.alerts;
+
+  let billsDueTotal: number | null = null;
+  if (Array.isArray(bills)) {
+    billsDueTotal = bills.reduce((total, value) => {
+      const amount = billAmount(value);
+      return amount === null ? total : total + amount;
+    }, 0);
+  }
+
+  return {
+    cashOnHand: isRecord(cash) ? finiteNumber(cash.amount) : null,
+    billsDueTotal,
+    billsDueCount: Array.isArray(bills) ? bills.length : 0,
+    depositTarget:
+      isRecord(depositGoal) && typeof depositGoal.target === "number"
+        ? depositGoal.target
+        : null,
+    status:
+      source === null
+        ? "unknown"
+        : Array.isArray(alerts) && alerts.length > 0
+          ? "alert"
+          : "ok",
+  };
 }
 
 function readErrorReason(error: unknown): string {
@@ -304,10 +371,14 @@ export function buildSnapshot(
   const uptime = opts.uptime ?? os.uptime;
   const loadavg = opts.loadavg ?? os.loadavg;
   const now = opts.now ?? new Date();
+  const money = readJsonEntry(paths.money, "box:buffett", readFile);
 
   return {
     bots: buildBots(paths, readFile),
-    money: readJsonEntry(paths.money, "box:buffett", readFile),
+    money:
+      money.data === null
+        ? money
+        : { ...money, data: summarizeMoney(money.data) },
     health: readJsonEntry(paths.health, "box:arnold", readFile),
     host: buildHost({ run, uptime, loadavg, now }),
     apple: buildApple(paths, readFile),
