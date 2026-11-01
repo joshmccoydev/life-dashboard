@@ -18,7 +18,7 @@ export type FeedEntry = {
 
 export type FeedSnapshot = Record<FeedDomain, FeedEntry>;
 
-const STALE_AFTER_MS = 30 * 60 * 1000;
+const STALE_AFTER_MS = 2 * 60 * 60 * 1000;
 const FEEDS_KV_KEY = "feeds";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
