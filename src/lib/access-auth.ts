@@ -4,6 +4,7 @@ const ACCESS_AUDIENCE =
   "664b2ba4711405313275fbc48ce565c87fa257899dd5ee5e93679eccff36d4c7";
 const ALLOWED_EMAIL = "hi@joshmccoy.dev";
 const ACCESS_CERTS_URL = `${ACCESS_TEAM_DOMAIN}/cdn-cgi/access/certs`;
+export const CERT_CACHE_TTL_MS = 3_600_000;
 export const FORCED_REFRESH_COOLDOWN_MS = 60_000;
 const RS256 = {
   name: "RSASSA-PKCS1-v1_5",
@@ -37,7 +38,12 @@ type DecodedJwt = {
   signature: Uint8Array<ArrayBuffer>;
 };
 
-let certificateCache: Promise<Map<string, JwkWithId>> | null = null;
+type CertificateCacheEntry = {
+  keys: Promise<Map<string, JwkWithId>>;
+  cachedAt: number;
+};
+
+let certificateCache: CertificateCacheEntry | null = null;
 let lastForcedRefreshAt: number | null = null;
 
 export function __resetAccessCertCache(): void {
@@ -143,16 +149,25 @@ async function fetchAccessKeys(
 function getAccessKeys(
   fetchImpl: typeof fetch,
   refresh: boolean,
+  now: number,
 ): Promise<Map<string, JwkWithId>> {
-  if (!refresh && certificateCache) return certificateCache;
+  if (
+    !refresh &&
+    certificateCache &&
+    now - certificateCache.cachedAt < CERT_CACHE_TTL_MS
+  ) {
+    return certificateCache.keys;
+  }
 
-  const pending = fetchAccessKeys(fetchImpl);
-  const cacheEntry = pending.catch((error: unknown) => {
-    if (certificateCache === cacheEntry) certificateCache = null;
-    throw error;
-  });
-  certificateCache = cacheEntry;
-  return cacheEntry;
+  const entry: CertificateCacheEntry = {
+    cachedAt: now,
+    keys: fetchAccessKeys(fetchImpl).catch((error: unknown) => {
+      if (certificateCache === entry) certificateCache = null;
+      throw error;
+    }),
+  };
+  certificateCache = entry;
+  return entry.keys;
 }
 
 async function findSigningKey(
@@ -160,7 +175,7 @@ async function findSigningKey(
   fetchImpl: typeof fetch,
   now: number,
 ): Promise<JsonWebKey | null> {
-  let keys = await getAccessKeys(fetchImpl, false);
+  let keys = await getAccessKeys(fetchImpl, false, now);
   let key = keys.get(kid);
 
   if (!key) {
@@ -172,7 +187,7 @@ async function findSigningKey(
     }
 
     lastForcedRefreshAt = now;
-    keys = await getAccessKeys(fetchImpl, true);
+    keys = await getAccessKeys(fetchImpl, true, now);
     key = keys.get(kid);
   }
 
@@ -211,6 +226,21 @@ function validateClaims(
   return { ok: true, email: ALLOWED_EMAIL };
 }
 
+async function verifySignature(
+  jwk: JsonWebKey,
+  jwt: DecodedJwt,
+): Promise<boolean> {
+  const key = await crypto.subtle.importKey("jwk", jwk, RS256, false, [
+    "verify",
+  ]);
+  return crypto.subtle.verify(
+    RS256,
+    key,
+    jwt.signature,
+    new TextEncoder().encode(jwt.signingInput),
+  );
+}
+
 export async function verifyAccessJwt(
   token: string | null,
   options: AccessAuthOptions,
@@ -221,23 +251,35 @@ export async function verifyAccessJwt(
   if (!jwt) return { ok: false, reason: "malformed" };
 
   try {
+    const kid = jwt.header.kid as string;
     const jwk = await findSigningKey(
-      jwt.header.kid as string,
+      kid,
       options.fetchImpl,
       options.now,
     );
     if (!jwk) return { ok: false, reason: "signature" };
 
-    const key = await crypto.subtle.importKey("jwk", jwk, RS256, false, [
-      "verify",
-    ]);
-    const valid = await crypto.subtle.verify(
-      RS256,
-      key,
-      jwt.signature,
-      new TextEncoder().encode(jwt.signingInput),
+    if (await verifySignature(jwk, jwt)) {
+      return validateClaims(jwt.payload, options.now);
+    }
+
+    const cacheAge =
+      certificateCache === null
+        ? null
+        : options.now - certificateCache.cachedAt;
+    if (cacheAge === null || cacheAge < FORCED_REFRESH_COOLDOWN_MS) {
+      return { ok: false, reason: "signature" };
+    }
+
+    const refreshedKeys = await getAccessKeys(
+      options.fetchImpl,
+      true,
+      options.now,
     );
-    if (!valid) return { ok: false, reason: "signature" };
+    const refreshedJwk = refreshedKeys.get(kid);
+    if (!refreshedJwk || !(await verifySignature(refreshedJwk, jwt))) {
+      return { ok: false, reason: "signature" };
+    }
   } catch {
     return { ok: false, reason: "certificates" };
   }
