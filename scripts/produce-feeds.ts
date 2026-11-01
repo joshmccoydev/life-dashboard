@@ -8,6 +8,7 @@ export type Entry = {
   updatedAt: string | null;
   source: string;
   error?: string;
+  note?: string;
 };
 
 export type Snapshot = {
@@ -26,6 +27,13 @@ export const MONEY_ALLOWED_KEYS = [
   "status",
 ] as const;
 
+export const HEALTH_ALLOWED_KEYS = [
+  "trainingDoneToday",
+  "streak",
+  "nextSession",
+  "lastWeighIn",
+] as const;
+
 export type MoneySummary = {
   cashOnHand: number | null;
   billsDueTotal: number | null;
@@ -34,9 +42,15 @@ export type MoneySummary = {
   status: "ok" | "alert" | "unknown";
 };
 
+export type HealthSummary = {
+  trainingDoneToday: "y" | "n" | null;
+  streak: number | null;
+  nextSession: string | null;
+  lastWeighIn?: string | number | null;
+};
+
 type FeedPaths = {
   status: string;
-  board: string;
   money: string;
   health: string;
   apple: string;
@@ -59,7 +73,6 @@ type StatusItem = {
 
 export const DEFAULT_PATHS: FeedPaths = {
   status: "/workspace/vault/00 Home/Bots/Status.md",
-  board: "/workspace/vault/00 Home/Bots/Board.md",
   money: "/workspace/exports/buffett-dash.json",
   health: "/workspace/exports/arnold-dash.json",
   apple: "/workspace/exports/apple-dash.json",
@@ -118,6 +131,79 @@ export function summarizeMoney(raw: unknown): MoneySummary {
           ? "alert"
           : "ok",
   };
+}
+
+function firstMatching(
+  source: Record<string, unknown>,
+  keys: readonly string[],
+  matches: (value: unknown) => boolean,
+): unknown {
+  for (const key of keys) {
+    if (Object.hasOwn(source, key) && matches(source[key])) {
+      return source[key];
+    }
+  }
+  return undefined;
+}
+
+function trainingDone(value: unknown): "y" | "n" | null {
+  if (value === true) return "y";
+  if (value === false) return "n";
+  if (typeof value !== "string") return null;
+
+  const normalized = value.trim().toLowerCase();
+  return normalized === "y" || normalized === "yes"
+    ? "y"
+    : normalized === "n" || normalized === "no"
+      ? "n"
+      : null;
+}
+
+function streakDays(value: unknown): number | null {
+  const numeric = finiteNumber(value);
+  if (numeric !== null) return numeric;
+  return isRecord(value) ? finiteNumber(value.days) : null;
+}
+
+export function summarizeHealth(raw: unknown): HealthSummary {
+  const source = isRecord(raw) ? raw : null;
+  if (source === null) {
+    return {
+      trainingDoneToday: null,
+      streak: null,
+      nextSession: null,
+    };
+  }
+
+  const training = firstMatching(
+    source,
+    ["trainingDoneToday", "training_done_today"],
+    (value) => trainingDone(value) !== null,
+  );
+  const nextSession = firstMatching(
+    source,
+    ["nextSession", "next_session"],
+    (value) => typeof value === "string",
+  );
+  const summary: HealthSummary = {
+    trainingDoneToday: trainingDone(training),
+    streak: streakDays(source.streak),
+    nextSession: typeof nextSession === "string" ? nextSession : null,
+  };
+
+  const lastWeighIn = firstMatching(
+    source,
+    ["lastWeighIn", "last_weigh_in"],
+    (value) => typeof value === "string" || finiteNumber(value) !== null,
+  );
+  const lastWeighInNumber = finiteNumber(lastWeighIn);
+  if (typeof lastWeighIn === "string") {
+    summary.lastWeighIn = lastWeighIn;
+  } else if (lastWeighInNumber !== null) {
+    summary.lastWeighIn = lastWeighInNumber;
+  }
+
+  return summary;
 }
 
 function readErrorReason(error: unknown): string {
@@ -223,52 +309,39 @@ export function readJsonEntry(
   }
 }
 
-function countLines(markdown: string): number {
-  if (!markdown) return 0;
-  const normalized = markdown.replace(/\r\n?/g, "\n");
-  const withoutFinalNewline = normalized.endsWith("\n")
-    ? normalized.slice(0, -1)
-    : normalized;
-  return withoutFinalNewline.split("\n").length;
-}
-
 export function buildBots(
-  paths: Pick<FeedPaths, "status" | "board">,
+  paths: Pick<FeedPaths, "status">,
   readFile: ReadFile = fs.readFileSync,
   stat: Stat = fs.statSync,
+  now: Date = new Date(),
 ): Entry {
   let statusMarkdown: string;
   try {
     statusMarkdown = toText(readFile(paths.status));
-  } catch (error) {
+  } catch {
     return {
       data: null,
       updatedAt: null,
       source: "box:status",
-      error: `status ${readErrorReason(error).toLowerCase()}`,
+      error: "status missing",
     };
   }
 
   let updatedAt: string | null = null;
+  let stale = false;
   try {
-    updatedAt = stat(paths.status).mtime.toISOString();
+    const modifiedAt = stat(paths.status).mtime;
+    updatedAt = modifiedAt.toISOString();
+    stale = now.getTime() - modifiedAt.getTime() > 24 * 60 * 60 * 1_000;
   } catch {
     updatedAt = null;
   }
 
-  let board: number | null = null;
-  const errors: string[] = [];
-  try {
-    board = countLines(toText(readFile(paths.board)));
-  } catch {
-    errors.push("board missing");
-  }
-
   return {
-    data: { bots: parseStatus(statusMarkdown), board },
+    data: { bots: parseStatus(statusMarkdown) },
     updatedAt,
     source: "box:status",
-    ...(errors.length > 0 ? { error: errors.join("; ") } : {}),
+    ...(stale ? { error: "status stale" } : {}),
   };
 }
 
@@ -366,6 +439,7 @@ export function buildApple(
       data: null,
       updatedAt: null,
       source: "mac:not-wired",
+      note: "not connected",
     };
   }
 }
@@ -393,14 +467,18 @@ export function buildSnapshot(
   const loadavg = opts.loadavg ?? os.loadavg;
   const now = opts.now ?? new Date();
   const money = readJsonEntry(paths.money, "box:buffett", readFile);
+  const health = readJsonEntry(paths.health, "box:arnold", readFile);
 
   return {
-    bots: buildBots(paths, readFile),
+    bots: buildBots(paths, readFile, fs.statSync, now),
     money:
       money.data === null
         ? money
         : { ...money, data: summarizeMoney(money.data) },
-    health: readJsonEntry(paths.health, "box:arnold", readFile),
+    health:
+      health.data === null
+        ? health
+        : { ...health, data: summarizeHealth(health.data) },
     host: buildHost({ run, uptime, loadavg, now }),
     apple: buildApple(paths, readFile),
   };
@@ -447,6 +525,7 @@ export function summarize(snapshot: Snapshot): Record<
     source: string;
     count: number;
     error?: string;
+    note?: string;
   }
 > {
   const summarizeEntry = (entry: Entry) => {
@@ -462,6 +541,7 @@ export function summarize(snapshot: Snapshot): Record<
       source: entry.source,
       count,
       ...(entry.error === undefined ? {} : { error: entry.error }),
+      ...(entry.note === undefined ? {} : { note: entry.note }),
     };
   };
 
