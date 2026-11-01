@@ -1124,4 +1124,15 @@ body main.dashboard {
   .weather-feed {
     align-items: flex-start;
   }
+
+  .feed-summary {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  .feed-summary > * {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 }
