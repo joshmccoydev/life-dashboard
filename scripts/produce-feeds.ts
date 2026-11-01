@@ -120,10 +120,9 @@ export function summarizeMoney(raw: unknown): MoneySummary {
     cashOnHand: isRecord(cash) ? finiteNumber(cash.amount) : null,
     billsDueTotal,
     billsDueCount: Array.isArray(bills) ? bills.length : 0,
-    depositTarget:
-      isRecord(depositGoal) && typeof depositGoal.target === "number"
-        ? depositGoal.target
-        : null,
+    depositTarget: isRecord(depositGoal)
+      ? finiteNumber(depositGoal.target)
+      : null,
     status:
       source === null
         ? "unknown"
@@ -569,6 +568,18 @@ export function planKvPut(file: string): string[] {
   ];
 }
 
+export function shouldPublish(snapshot: Snapshot): {
+  ok: boolean;
+  failed: string[];
+} {
+  const requiredDomains = ["bots", "money", "health", "host"] as const;
+  const failed = requiredDomains.filter(
+    (domain) => snapshot[domain].data === null,
+  );
+
+  return { ok: failed.length === 0, failed };
+}
+
 function printSummary(snapshot: Snapshot): void {
   process.stdout.write(`${JSON.stringify(summarize(snapshot))}\n`);
 }
@@ -577,6 +588,16 @@ export function main(argv: string[]): void {
   const snapshot = buildSnapshot();
   if (argv.includes("--dry-run")) {
     printSummary(snapshot);
+    return;
+  }
+
+  const publication = shouldPublish(snapshot);
+  if (!publication.ok) {
+    printSummary(snapshot);
+    process.stdout.write(
+      `${JSON.stringify({ skipped: "publish", failed: publication.failed })}\n`,
+    );
+    process.exitCode = 1;
     return;
   }
 
