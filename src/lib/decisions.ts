@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import {
+  appendFile,
+  mkdir,
+  readFile,
+  readdir,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 
 const DECISIONS_PATH = "03 Resources/_Meta/Decisions.md";
@@ -510,7 +516,7 @@ function centralStamp(value: Date): string {
 export function formatAnswerLine(input: AnswerInput): string {
   const question = oneLine(input.question);
   const reply = oneLine(input.reply) || input.choice;
-  return `- [x] ${centralStamp(input.at)} \u2014 owner: ${input.bot} \u2014 Josh: "${reply}" | choice: ${input.choice} | q: ${question} | via: decisions app [id:${input.id}]`;
+  return `- [x] ${centralStamp(input.at)} \u2014 owner: ${input.bot} \u2014 Josh: "${reply}" | choice: ${input.choice} | q: ${question} | via: dash [id:${input.id}]`;
 }
 
 export async function appendAnswer(input: {
@@ -538,10 +544,10 @@ export async function appendAnswer(input: {
 
   await mkdir(path.dirname(input.decisionsFile), { recursive: true });
   const separator = content.length > 0 && !content.endsWith("\n") ? "\n" : "";
-  await writeFile(
+  await appendFile(
     input.decisionsFile,
-    `${content}${separator}${input.line}\n`,
-    "utf8",
+    `${separator}${input.line}\n`,
+    { encoding: "utf8", flag: "a" },
   );
   return { added: true };
 }
