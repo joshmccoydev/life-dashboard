@@ -10,7 +10,7 @@
   "kv_namespaces": [
     {
       "binding": "FEEDS_KV",
-      "id": "REPLACE_WITH_PREVIEW_KV_ID"
+      "id": "a580b4b646814c3ea90368738185c07f"
     }
   ],
   "workers_dev": true
