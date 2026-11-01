@@ -963,6 +963,12 @@ body main.dashboard {
   font-size: var(--type-detail);
 }
 
+.dashboard-card,
+.dashboard-panel-meta {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .mode-night .work-column,
 .mode-night .digital-column {
   opacity: var(--auto-dim-night);
@@ -1089,5 +1095,33 @@ body main.dashboard {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+@media (max-width: 639px) {
+  .header,
+  .dashboard-tabs,
+  .domain-columns {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .header,
+  .weather {
+    flex-wrap: wrap;
+  }
+
+  .weather-main {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .weather-main p,
+  .weather-main > span {
+    white-space: normal;
+  }
+
+  .weather-feed {
+    align-items: flex-start;
   }
 }
