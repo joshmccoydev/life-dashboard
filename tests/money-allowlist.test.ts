@@ -135,7 +135,6 @@ test("buildSnapshot allowlists the money data shape", () => {
   const snapshot = buildSnapshot({
     paths: {
       status: "/synthetic/Bots/Status.md",
-      board: "/synthetic/Bots/Board.md",
       money: MONEY_PATH,
       health: "/synthetic/exports/arnold-dash.json",
       apple: "/synthetic/exports/apple-dash.json",
