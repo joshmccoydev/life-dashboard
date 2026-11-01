@@ -8,7 +8,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "kv_namespaces": [
     {
-      "binding": "DASH_FEEDS",
+      "binding": "FEEDS_KV",
       "id": "REPLACE_WITH_PREVIEW_KV_ID"
     }
   ],
