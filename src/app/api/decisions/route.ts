@@ -3,9 +3,9 @@ import {
   DECISIONS_PATH,
   appendAnswer,
   buildSnapshot,
-  checkToken,
   formatAnswerLine,
 } from "@/lib/decisions";
+import { isAccessAuthorized } from "@/lib/access-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,44 +35,6 @@ function unauthorizedResponse(): Response {
     status: 401,
     headers: RESPONSE_HEADERS,
   });
-}
-
-function cookieToken(request: Request): string | undefined {
-  const cookieHeader = request.headers.get("cookie");
-  if (!cookieHeader) return undefined;
-
-  for (const cookie of cookieHeader.split(";")) {
-    const separator = cookie.indexOf("=");
-    if (separator < 0) continue;
-
-    const name = cookie.slice(0, separator).trim();
-    if (name !== "decisions_token") continue;
-
-    const value = cookie.slice(separator + 1).trim();
-    if (!value) return undefined;
-
-    try {
-      return decodeURIComponent(value);
-    } catch {
-      return value;
-    }
-  }
-
-  return undefined;
-}
-
-function requestToken(
-  request: Request,
-  formToken?: string,
-): string | undefined {
-  const queryToken = new URL(request.url).searchParams.get("t");
-  return (
-    queryToken ||
-    request.headers.get("x-decisions-token") ||
-    cookieToken(request) ||
-    formToken ||
-    undefined
-  );
 }
 
 function snapshotOptions() {
@@ -126,10 +88,10 @@ function validateSubmission(values: {
 
 export async function GET(request: Request): Promise<Response> {
   if (
-    !checkToken(
-      requestToken(request),
-      process.env.DECISIONS_TOKEN,
-    )
+    !(await isAccessAuthorized(request, {
+      fetchImpl: globalThis.fetch,
+      now: new Date().getTime(),
+    }))
   ) {
     return unauthorizedResponse();
   }
@@ -143,6 +105,15 @@ export async function GET(request: Request): Promise<Response> {
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    if (
+      !(await isAccessAuthorized(request, {
+        fetchImpl: globalThis.fetch,
+        now: new Date().getTime(),
+      }))
+    ) {
+      return unauthorizedResponse();
+    }
+
     const contentType =
       request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() ??
       "";
@@ -152,11 +123,6 @@ export async function POST(request: Request): Promise<Response> {
     const form = isForm
       ? new URLSearchParams(await request.text())
       : undefined;
-    const token = requestToken(request, form?.get("t") ?? undefined);
-
-    if (!token || !checkToken(token, process.env.DECISIONS_TOKEN)) {
-      return unauthorizedResponse();
-    }
 
     if (!isForm && !isJson) {
       return jsonResponse({ error: "unsupported content type" }, 415);
@@ -218,12 +184,11 @@ export async function POST(request: Request): Promise<Response> {
     });
 
     if (form) {
-      const redirectToken = new URLSearchParams({ t: token }).toString();
       return new Response(null, {
         status: 303,
         headers: {
           ...RESPONSE_HEADERS,
-          Location: `/decisions?${redirectToken}`,
+          Location: "/decisions",
         },
       });
     }
