@@ -168,7 +168,21 @@ function MoneyPanel({
   display: DisplayConfig;
   now: Date;
 }) {
+  type FinanceSummary = {
+    cashOnHand: number | null;
+    billsDueTotal: number | null;
+    billsDueCount: number;
+    depositTarget: number | null;
+    status: "ok" | "alert" | "unknown";
+  };
+
   const finance = data.finance.data;
+  const financeSummary =
+    finance !== null &&
+    typeof finance === "object" &&
+    "cashOnHand" in finance
+      ? (finance as unknown as FinanceSummary)
+      : null;
   const money = new Intl.NumberFormat(display.locale, {
     style: "currency",
     currency: display.currency,
@@ -196,6 +210,52 @@ function MoneyPanel({
     >
       {finance === null ? (
         <div className="domain-empty">No data</div>
+      ) : financeSummary ? (
+        <div className="dashboard-money-grid">
+          <div>
+            <span>Cash on hand</span>
+            <strong>
+              {financeSummary.cashOnHand === null
+                ? "—"
+                : money.format(financeSummary.cashOnHand)}
+            </strong>
+          </div>
+          <div>
+            <span>Bills due</span>
+            <strong>
+              {financeSummary.billsDueTotal === null
+                ? "—"
+                : money.format(financeSummary.billsDueTotal)}
+            </strong>
+            <p>{financeSummary.billsDueCount} bills</p>
+          </div>
+          <div>
+            <span>Deposit target</span>
+            <strong>
+              {financeSummary.depositTarget === null
+                ? "—"
+                : money.format(financeSummary.depositTarget)}
+            </strong>
+          </div>
+          <div>
+            <span>Status</span>
+            <strong
+              className={
+                financeSummary.status === "ok"
+                  ? "metric-good"
+                  : financeSummary.status === "alert"
+                    ? "metric-critical"
+                    : undefined
+              }
+            >
+              {financeSummary.status === "ok"
+                ? "On track"
+                : financeSummary.status === "alert"
+                  ? "Alert"
+                  : "Unknown"}
+            </strong>
+          </div>
+        </div>
       ) : (
         <div className="dashboard-money-grid">
           <div>
