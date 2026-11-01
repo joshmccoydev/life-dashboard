@@ -254,6 +254,14 @@ test("phone weather feed aligns to the top", () => {
   assertDeclaration(phoneRules, ".weather-feed", "align-items", "flex-start");
 });
 
+test("phone feed summary fits a 375px viewport", () => {
+  const phoneRules = maxWidthMediaBody(css, 639);
+  assertDeclaration(phoneRules, ".feed-summary", "flex-wrap", "wrap");
+  assertDeclaration(phoneRules, ".feed-summary", "max-width", "100%");
+  assertDeclaration(phoneRules, ".feed-summary > *", "min-width", "0");
+  assertDeclaration(phoneRules, ".feed-summary > *", "white-space", "normal");
+});
+
 test("phone shell sections fit within the viewport", () => {
   const phoneRules = maxWidthMediaBody(css, 639);
 
