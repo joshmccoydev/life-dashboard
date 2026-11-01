@@ -1,9 +1,73 @@
-import type { CSSProperties } from "react";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { headers } from "next/headers";
+import type { CSSProperties, ReactNode } from "react";
 import { verifyAccessJwt } from "@/lib/access-auth";
-import { buildSnapshot } from "@/lib/decisions";
+import { buildSnapshot, type Snapshot } from "@/lib/decisions";
+import { readKvFeeds } from "@/lib/feed-store";
 
 export const dynamic = "force-dynamic";
+
+export type DecisionsPageDependencies = {
+  accessJwt?: string | null;
+  verify?: (jwt: string | null) => Promise<{ ok: boolean }>;
+  snapshot?: () => Promise<Snapshot>;
+  env?: {
+    FEEDS_KV?: {
+      get(key: string): Promise<string | null>;
+    };
+  };
+  getCloudflareContext?: () => unknown;
+  now?: Date;
+};
+
+type KvBinding = NonNullable<
+  NonNullable<DecisionsPageDependencies["env"]>["FEEDS_KV"]
+>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isKvBinding(value: unknown): value is KvBinding {
+  return isRecord(value) && typeof value.get === "function";
+}
+
+function isSnapshot(value: unknown): value is Snapshot {
+  return (
+    isRecord(value) &&
+    typeof value.generatedAt === "string" &&
+    typeof value.count === "number" &&
+    Array.isArray(value.cards)
+  );
+}
+
+function decisionSnapshotFromFeeds(incoming: unknown): Snapshot | null {
+  if (!isRecord(incoming) || !isRecord(incoming.decisions)) return null;
+
+  const data = incoming.decisions.data;
+  return isSnapshot(data) ? data : null;
+}
+
+async function resolveEnv(
+  dependencies: DecisionsPageDependencies,
+): Promise<DecisionsPageDependencies["env"]> {
+  if (dependencies.env) return dependencies.env;
+
+  try {
+    const context = await (
+      dependencies.getCloudflareContext ?? getCloudflareContext
+    )();
+    if (!isRecord(context) || !isRecord(context.env)) return undefined;
+
+    return {
+      FEEDS_KV: isKvBinding(context.env.FEEDS_KV)
+        ? context.env.FEEDS_KV
+        : undefined,
+    };
+  } catch {
+    return undefined;
+  }
+}
 
 function formatAge(
   ageMin: number | null,
@@ -175,26 +239,44 @@ const styles = {
   },
 } satisfies Record<string, CSSProperties>;
 
-export default async function DecisionsPage() {
-  const now = new Date();
-  const access = await verifyAccessJwt(
-    (await headers()).get("cf-access-jwt-assertion"),
-    {
-      fetchImpl: globalThis.fetch,
-      now: now.getTime(),
-    },
-  );
-
+export async function DecisionsPageContent(
+  dependencies: DecisionsPageDependencies,
+): Promise<ReactNode> {
+  const now = dependencies.now ?? new Date();
+  const verify =
+    dependencies.verify ??
+    ((accessJwt: string | null) =>
+      verifyAccessJwt(accessJwt, {
+        fetchImpl: globalThis.fetch,
+        now: now.getTime(),
+      }));
+  const access = await verify(dependencies.accessJwt ?? null);
   if (!access.ok) {
     return "unauthorized";
   }
 
-  const snapshot = await buildSnapshot({
-    vaultDir: process.env.DECISIONS_VAULT ?? "/workspace/vault",
-    remindersFile:
-      process.env.DECISIONS_REMINDERS ?? "/workspace/reminders-queue.md",
-    now,
-  });
+  const diskSnapshot = await (
+    dependencies.snapshot ??
+    (() =>
+      buildSnapshot({
+        vaultDir: process.env.DECISIONS_VAULT ?? "/workspace/vault",
+        remindersFile:
+          process.env.DECISIONS_REMINDERS ??
+          "/workspace/reminders-queue.md",
+        now,
+      }))
+  )();
+  let snapshot = diskSnapshot;
+
+  if (diskSnapshot.cards.length === 0) {
+    try {
+      const env = await resolveEnv(dependencies);
+      const feeds = await readKvFeeds(env?.FEEDS_KV);
+      snapshot = decisionSnapshotFromFeeds(feeds) ?? diskSnapshot;
+    } catch {
+      snapshot = diskSnapshot;
+    }
+  }
 
   return (
     <main style={styles.page}>
@@ -317,4 +399,19 @@ export default async function DecisionsPage() {
       </div>
     </main>
   );
+}
+
+export default async function DecisionsPage(): Promise<ReactNode> {
+  const now = new Date();
+  const accessJwt = (await headers()).get("cf-access-jwt-assertion");
+  const access = await verifyAccessJwt(accessJwt, {
+    fetchImpl: globalThis.fetch,
+    now: now.getTime(),
+  });
+
+  return DecisionsPageContent({
+    accessJwt,
+    verify: async () => access,
+    now,
+  });
 }
