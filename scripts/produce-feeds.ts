@@ -27,7 +27,7 @@ export type Snapshot = {
 export type KvDeps = {
   kvGet: () => string | null;
   kvPut: (json: string) => void;
-  build?: () => Snapshot | PromiseLike<Snapshot>;
+  build?: () => Snapshot | Promise<Snapshot>;
   out?: (line: string) => void;
 };
 
@@ -43,7 +43,14 @@ export type BuiltSnapshot = Snapshot & {
   decisions: DecisionsResult;
 };
 
-export type SnapshotPromise = BuiltSnapshot & PromiseLike<BuiltSnapshot>;
+type BuildSnapshotOptions = {
+  paths?: Partial<FeedPaths>;
+  readFile?: ReadFile;
+  run?: RunCommand;
+  uptime?: () => number;
+  loadavg?: () => number[];
+  now?: Date;
+};
 
 export const DECISIONS_LIMIT = 50;
 
@@ -508,16 +515,7 @@ export function buildApple(
   }
 }
 
-export function buildSnapshot(
-  opts: {
-    paths?: Partial<FeedPaths>;
-    readFile?: ReadFile;
-    run?: RunCommand;
-    uptime?: () => number;
-    loadavg?: () => number[];
-    now?: Date;
-  } = {},
-): SnapshotPromise {
+function buildSnapshotSync(opts: BuildSnapshotOptions): BuiltSnapshot {
   const paths: FeedPaths = { ...DEFAULT_PATHS, ...opts.paths };
   const readFile = opts.readFile ?? fs.readFileSync;
   const run: RunCommand =
@@ -566,22 +564,24 @@ export function buildSnapshot(
       error: "decisions pending",
     },
   };
-  let settled: Promise<BuiltSnapshot> | null = null;
-  const settle = (): Promise<BuiltSnapshot> => {
-    settled ??= buildDecisions({ now }).then((decisions) => ({
-      ...snapshot,
-      decisions,
-    }));
-    return settled;
-  };
-  const then: PromiseLike<BuiltSnapshot>["then"] = (onfulfilled, onrejected) =>
-    settle().then(onfulfilled, onrejected);
+  return snapshot;
+}
 
-  Object.defineProperty(snapshot, "then", {
-    value: then,
-    enumerable: false,
-  });
-  return snapshot as SnapshotPromise;
+export function buildSnapshot(): Promise<BuiltSnapshot>;
+export function buildSnapshot(opts: BuildSnapshotOptions): BuiltSnapshot;
+export function buildSnapshot(
+  opts?: BuildSnapshotOptions,
+): Promise<BuiltSnapshot> | BuiltSnapshot {
+  return opts === undefined ? buildSnapshotAsync() : buildSnapshotSync(opts);
+}
+
+export async function buildSnapshotAsync(
+  opts: BuildSnapshotOptions = {},
+): Promise<BuiltSnapshot> {
+  const now = opts.now ?? new Date();
+  const snapshot = buildSnapshotSync({ ...opts, now });
+  const decisions = await buildDecisions({ now });
+  return { ...snapshot, decisions };
 }
 
 export function toKvPayload(snapshot: Snapshot): Record<
@@ -863,7 +863,7 @@ export function main(
 ): number;
 export function main(argv: string[], deps?: KvDeps): number | Promise<number>;
 export function main(argv: string[], deps?: KvDeps): number | Promise<number> {
-  const built = (deps?.build ?? buildSnapshot)();
+  const built = (deps?.build ?? buildSnapshotAsync)();
   if (isPromiseLike<Snapshot>(built)) {
     return Promise.resolve(built).then((snapshot) =>
       runMain(argv, snapshot, deps),
