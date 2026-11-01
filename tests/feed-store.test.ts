@@ -2,7 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mergeFeeds, readKvFeeds } from "../src/lib/feed-store.ts";
 
-const DOMAINS = ["bots", "money", "health", "host", "apple"] as const;
+const DOMAINS = [
+  "bots",
+  "money",
+  "health",
+  "host",
+  "apple",
+  "decisions",
+] as const;
 const NOW = new Date("2026-11-01T16:30:00.000Z");
 const RECENT = "2026-11-01T16:20:00.000Z";
 const OLDER_THAN_THIRTY_MINUTES = "2026-11-01T15:59:59.999Z";
