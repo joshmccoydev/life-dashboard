@@ -12,6 +12,7 @@ import {
   type FeedEntry,
   type FeedSnapshot,
 } from "@/lib/feed-store";
+import { botsToAiState, hostToSystemState } from "@/lib/feed-adapters";
 import type {
   BuildState,
   DashboardData,
@@ -258,29 +259,47 @@ function dashboardFromFeeds(
     calendar: feedState(
       feeds.apple,
       now,
-      config.intervals.calendar,
+      Math.max(config.intervals.calendar, 3600000),
       applePart(feeds, "calendar") as DashboardData["calendar"]["data"],
     ),
     reminders: feedState(
       feeds.apple,
       now,
-      config.intervals.reminders,
+      Math.max(config.intervals.reminders, 3600000),
       applePart(feeds, "reminders") as DashboardData["reminders"]["data"],
     ),
-    finance: feedState(feeds.money, now, config.intervals.finance),
-    health: feedState(feeds.health, now, config.intervals.health),
-    ai: feedState(feeds.bots, now, config.intervals.ai),
-    systems: feedState(feeds.host, now, config.intervals.systems),
+    finance: feedState(
+      feeds.money,
+      now,
+      Math.max(config.intervals.finance, 3600000),
+    ),
+    health: feedState(
+      feeds.health,
+      now,
+      Math.max(config.intervals.health, 3600000),
+    ),
+    ai: feedState(
+      feeds.bots,
+      now,
+      Math.max(config.intervals.ai, 3600000),
+      botsToAiState(feeds.bots.data),
+    ),
+    systems: feedState(
+      feeds.host,
+      now,
+      Math.max(config.intervals.systems, 3600000),
+      hostToSystemState(feeds.host.data),
+    ),
     habits: feedState(
       feeds.apple,
       now,
-      config.intervals.habits,
+      Math.max(config.intervals.habits, 3600000),
       applePart(feeds, "habits") as DashboardData["habits"]["data"],
     ),
     goals: feedState(
       feeds.apple,
       now,
-      config.intervals.goals,
+      Math.max(config.intervals.goals, 3600000),
       applePart(feeds, "goals") as DashboardData["goals"]["data"],
     ),
   };

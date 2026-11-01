@@ -73,7 +73,7 @@ test("preview wrangler config targets the OpenNext worker without exposing secre
   assert.deepEqual(config.kv_namespaces, [
     {
       binding: "FEEDS_KV",
-      id: "REPLACE_WITH_PREVIEW_KV_ID",
+      id: "a580b4b646814c3ea90368738185c07f",
     },
   ]);
   assert.equal(config.workers_dev, true);
