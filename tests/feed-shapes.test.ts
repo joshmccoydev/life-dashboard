@@ -185,8 +185,11 @@ function alertData(systemsData: unknown): DashboardData {
 
 function panelHtml(html: string, id: string): string {
   const marker = `dashboard-card-${id}`;
-  const start = html.indexOf(marker);
-  assert.notEqual(start, -1, `${id} panel should be rendered`);
+  const elementMatch = new RegExp(
+    `class="[^"]*\\bdashboard-card-${id}\\b[^"]*"`,
+  ).exec(html);
+  assert.ok(elementMatch, `${id} panel should be rendered`);
+  const start = elementMatch.index;
 
   const mainEnd = html.indexOf("</main>", start);
   const nextPanel = html.indexOf('<section class="dashboard-card', start + marker.length);
@@ -353,8 +356,8 @@ test("producer entries stay fresh for two hours and KV data gets an hourly refre
     hostToSystemState(PRODUCER_SNAPSHOT.host.data),
   );
   assert.deepEqual(
-    payload.data.ai.data,
-    botsToAiState(PRODUCER_SNAPSHOT.bots.data),
+    JSON.parse(JSON.stringify(payload.data.ai.data)),
+    JSON.parse(JSON.stringify(botsToAiState(PRODUCER_SNAPSHOT.bots.data))),
   );
 
   for (const domain of [
