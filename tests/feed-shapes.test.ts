@@ -13,6 +13,7 @@ import { Dashboard } from "../src/components/dashboard";
 import type {
   AITelemetryState,
   DashboardData,
+  DataState,
   DisplayConfig,
   SystemState,
 } from "../src/domains/models";
@@ -147,17 +148,24 @@ async function requestDashboard(): Promise<{
 }
 
 function snapshotUpdatedAt(updatedAt: string | null) {
-  const snapshot = structuredClone(PRODUCER_SNAPSHOT);
-  for (const entry of Object.values(snapshot)) {
-    entry.updatedAt = entry.data === null ? null : updatedAt;
-  }
-  return snapshot;
+  const copyEntry = <T extends { data: unknown }>(entry: T) => ({
+    ...entry,
+    updatedAt: entry.data === null ? null : updatedAt,
+  });
+
+  return {
+    bots: copyEntry(PRODUCER_SNAPSHOT.bots),
+    money: copyEntry(PRODUCER_SNAPSHOT.money),
+    health: copyEntry(PRODUCER_SNAPSHOT.health),
+    host: copyEntry(PRODUCER_SNAPSHOT.host),
+    apple: copyEntry(PRODUCER_SNAPSHOT.apple),
+  };
 }
 
 function alertData(systemsData: unknown): DashboardData {
   const state = <K extends keyof DashboardData>(
-    data: DashboardData[K]["data"],
-  ): DashboardData[K] => ({
+    data: NonNullable<DashboardData[K]["data"]> | null,
+  ): DataState<NonNullable<DashboardData[K]["data"]>> => ({
     loading: false,
     data,
     source: "real",
