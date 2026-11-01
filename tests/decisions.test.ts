@@ -1,4 +1,4 @@
-import test, { type TestContext } from "node:test";
+import test, { before, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import {
   mkdir,
@@ -10,7 +10,10 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-const M: any = await import(["..", "src", "lib", "decisions.ts"].join("/"));
+let M: any;
+before(async () => {
+  M = await import(["..", "src", "lib", "decisions.ts"].join("/"));
+});
 
 const NOW = new Date("2026-11-01T17:00:00.000Z");
 const DECISIONS_PATH = "03 Resources/_Meta/Decisions.md";
