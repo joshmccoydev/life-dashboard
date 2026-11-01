@@ -44,12 +44,13 @@ function declaration(rule: CssRule, property: string): string | undefined {
   return undefined;
 }
 
-function mediaBody(source: string, minWidth: number): string {
-  const opening = new RegExp(
-    `@media\\s*\\(\\s*min-width\\s*:\\s*${minWidth}px\\s*\\)\\s*\\{`,
-    "i",
-  ).exec(source);
-  assert.ok(opening, `@media (min-width: ${minWidth}px) is missing`);
+function mediaBodyAt(
+  source: string,
+  openingPattern: RegExp,
+  label: string,
+): string {
+  const opening = openingPattern.exec(source);
+  assert.ok(opening, `${label} is missing`);
 
   const start = opening.index + opening[0].length;
   let depth = 1;
@@ -58,7 +59,53 @@ function mediaBody(source: string, minWidth: number): string {
     if (source[index] === "}") depth--;
     if (depth === 0) return source.slice(start, index);
   }
-  assert.fail(`@media (min-width: ${minWidth}px) is not closed`);
+  assert.fail(`${label} is not closed`);
+}
+
+function mediaBody(source: string, minWidth: number): string {
+  const label = `@media (min-width: ${minWidth}px)`;
+  return mediaBodyAt(
+    source,
+    new RegExp(
+      `@media\\s*\\(\\s*min-width\\s*:\\s*${minWidth}px\\s*\\)\\s*\\{`,
+      "i",
+    ),
+    label,
+  );
+}
+
+function maxWidthMediaBody(source: string, maxWidth: number): string {
+  const label = `@media (max-width: ${maxWidth}px)`;
+  return mediaBodyAt(
+    source,
+    new RegExp(
+      `@media\\s*\\(\\s*max-width\\s*:\\s*${maxWidth}px\\s*\\)\\s*\\{`,
+      "i",
+    ),
+    label,
+  );
+}
+
+function rulesMatchingSelector(source: string, selector: string): CssRule[] {
+  return rules(source).filter((rule) =>
+    selectorParts(rule.selector).includes(selector),
+  );
+}
+
+function assertDeclaration(
+  source: string,
+  selector: string,
+  property: string,
+  expected: string,
+): void {
+  const matchingRules = rulesMatchingSelector(source, selector);
+  assert.ok(matchingRules.length > 0, `${selector} is missing`);
+  assert.ok(
+    matchingRules.some(
+      (rule) => declaration(rule, property)?.toLowerCase() === expected,
+    ),
+    `${selector} needs ${property}: ${expected}`,
+  );
 }
 
 test("html and body contain horizontal overflow with universal border-box sizing", () => {
@@ -149,4 +196,69 @@ test("images and inline SVGs cannot exceed their containers", () => {
 
 test("long words can break anywhere", () => {
   assert.match(css, /overflow-wrap\s*:\s*anywhere\s*;/i);
+});
+
+test("max-width media parsing returns the balanced 639px block", () => {
+  const fixture = `
+    @media (max-width: 320px) {
+      .unrelated { display: none; }
+    }
+    @media (max-width: 639px) {
+      .phone {
+        color: red;
+      }
+      @supports (display: grid) {
+        .nested { display: grid; }
+      }
+    }
+    @media (max-width: 1000px) {
+      .after { display: none; }
+    }
+  `;
+
+  const body = maxWidthMediaBody(fixture, 639);
+  assert.match(body, /\.phone\s*\{/);
+  assert.match(body, /\.nested\s*\{/);
+  assert.doesNotMatch(body, /\.unrelated\s*\{/);
+  assert.doesNotMatch(body, /\.after\s*\{/);
+});
+
+test("phone weather summary can wrap and shrink", () => {
+  const phoneRules = maxWidthMediaBody(css, 639);
+  assertDeclaration(phoneRules, ".weather", "flex-wrap", "wrap");
+  assertDeclaration(phoneRules, ".weather-main", "min-width", "0");
+  assertDeclaration(phoneRules, ".weather-main", "flex-wrap", "wrap");
+});
+
+test("phone weather copy can wrap", () => {
+  const phoneRules = maxWidthMediaBody(css, 639);
+  const wrappingRules = [
+    ...rulesMatchingSelector(phoneRules, ".weather-main p"),
+    ...rulesMatchingSelector(phoneRules, ".weather-main > span"),
+  ];
+
+  assert.ok(
+    wrappingRules.length > 0,
+    ".weather-main p or .weather-main > span is missing",
+  );
+  assert.ok(
+    wrappingRules.some(
+      (rule) => declaration(rule, "white-space")?.toLowerCase() === "normal",
+    ),
+    ".weather-main p or .weather-main > span needs white-space: normal",
+  );
+});
+
+test("phone weather feed aligns to the top", () => {
+  const phoneRules = maxWidthMediaBody(css, 639);
+  assertDeclaration(phoneRules, ".weather-feed", "align-items", "flex-start");
+});
+
+test("phone shell sections fit within the viewport", () => {
+  const phoneRules = maxWidthMediaBody(css, 639);
+
+  for (const selector of [".header", ".dashboard-tabs", ".domain-columns"]) {
+    assertDeclaration(phoneRules, selector, "max-width", "100%");
+    assertDeclaration(phoneRules, selector, "min-width", "0");
+  }
 });
