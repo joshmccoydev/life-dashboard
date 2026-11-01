@@ -72,7 +72,7 @@ test("preview wrangler config targets the OpenNext worker without exposing secre
   assert.deepEqual(config.compatibility_flags, ["nodejs_compat"]);
   assert.deepEqual(config.kv_namespaces, [
     {
-      binding: "DASH_FEEDS",
+      binding: "FEEDS_KV",
       id: "REPLACE_WITH_PREVIEW_KV_ID",
     },
   ]);
