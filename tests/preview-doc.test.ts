@@ -128,3 +128,29 @@ test("prohibits deploy, Access, and DNS changes without Josh's yes", () => {
     "docs/PREVIEW.md must state one rule covering deploy, Access, and DNS approval",
   );
 });
+
+test("documents the exact local KV put command and remote preview usage", () => {
+  const doc = loadPreviewDoc();
+  const command =
+    "npx wrangler kv key put feeds --binding FEEDS_KV --local --path tests/fixtures/preview-feeds.json";
+
+  assert.ok(
+    doc.includes(command),
+    `docs/PREVIEW.md must contain the exact command: ${command}`,
+  );
+
+  const invalidRemotePut = doc
+    .split(/\r?\n/)
+    .find(
+      (line) =>
+        line.includes("kv key put") &&
+        line.includes("--remote") &&
+        !line.includes("--preview"),
+    );
+
+  assert.equal(
+    invalidRemotePut,
+    undefined,
+    'lines containing "kv key put" and "--remote" must also contain "--preview"',
+  );
+});
