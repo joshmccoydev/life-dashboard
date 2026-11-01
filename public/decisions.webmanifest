@@ -1,0 +1,17 @@
+{
+  "name": "decisions",
+  "short_name": "decisions",
+  "start_url": "/decisions",
+  "scope": "/decisions",
+  "display": "standalone",
+  "background_color": "#0b0b0c",
+  "theme_color": "#0b0b0c",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
