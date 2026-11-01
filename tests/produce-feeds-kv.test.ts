@@ -21,7 +21,7 @@ type PayloadEntry = {
   data: unknown;
   updatedAt: string | null;
   stale: boolean;
-  source: "box" | "mac";
+  source: "box" | "mac" | null;
 };
 type ToKvPayload = (snapshot: Snapshot) => Record<Domain, PayloadEntry>;
 
@@ -48,8 +48,28 @@ function requireToKvPayload(): ToKvPayload {
   return candidate;
 }
 
+function snapshotFromFiles(files: Record<string, string>): Snapshot {
+  return produceFeeds.buildSnapshot({
+    paths: PATHS,
+    readFile: inlineReadFile(files),
+    run: (cmd) => {
+      if (cmd === "df") {
+        return [
+          "Filesystem 1024-blocks Used Available Capacity Mounted on",
+          "/dev/sda1 100 25 75 25% /",
+        ].join("\n");
+      }
+      if (cmd === "crontab") return "0 * * * * /synthetic/hourly";
+      throw new Error(`unexpected synthetic command: ${cmd}`);
+    },
+    uptime: () => 12_345,
+    loadavg: () => [0.1, 0.2, 0.3],
+    now: NOW,
+  });
+}
+
 function syntheticSnapshot(): Snapshot {
-  const readFile = inlineReadFile({
+  return snapshotFromFiles({
     [PATHS.status]: [
       "## Buffett",
       "updated: 2026-11-01T16:20:00.000Z",
@@ -76,24 +96,6 @@ function syntheticSnapshot(): Snapshot {
       extra: "must not reach the feed",
     }),
   });
-
-  return produceFeeds.buildSnapshot({
-    paths: PATHS,
-    readFile,
-    run: (cmd) => {
-      if (cmd === "df") {
-        return [
-          "Filesystem 1024-blocks Used Available Capacity Mounted on",
-          "/dev/sda1 100 25 75 25% /",
-        ].join("\n");
-      }
-      if (cmd === "crontab") return "0 * * * * /synthetic/hourly";
-      throw new Error(`unexpected synthetic command: ${cmd}`);
-    },
-    uptime: () => 12_345,
-    loadavg: () => [0.1, 0.2, 0.3],
-    now: NOW,
-  });
 }
 
 test("toKvPayload emits feed-store entries and preserves money data", () => {
@@ -118,6 +120,30 @@ test("toKvPayload emits feed-store entries and preserves money data", () => {
   const merged = mergeFeeds(null, payload, NOW);
   assert.notEqual(merged.money.data, null);
   assert.deepEqual(merged.money.data, snapshot.money.data);
+});
+
+test("toKvPayload maps missing money and apple files to unavailable entries", () => {
+  const snapshot = snapshotFromFiles({
+    [PATHS.status]: "## Buffett\nupdated: 2026-11-01T16:20:00.000Z",
+    [PATHS.board]: "First line\nSecond line",
+    [PATHS.health]: JSON.stringify({
+      updated_at: "2026-11-01T16:10:00.000Z",
+      recovery: 82,
+    }),
+  });
+  const payload = requireToKvPayload()(snapshot);
+  const unavailableEntry = {
+    data: null,
+    updatedAt: null,
+    stale: false,
+    source: null,
+  };
+
+  assert.match(snapshot.money.error ?? "", /ENOENT/);
+  assert.deepEqual(payload.money, unavailableEntry);
+  assert.deepEqual(payload.apple, unavailableEntry);
+  assert.notEqual(payload.health.data, null);
+  assert.equal(payload.health.source, "box");
 });
 
 test("buildApple passes only the four allowlisted data keys", () => {
