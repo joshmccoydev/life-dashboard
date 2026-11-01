@@ -236,7 +236,7 @@ test("mergeForPublish preserves extra keys and reports each domain", () => {
   const result = mergeForPublish(existing, current);
 
   assert.deepEqual(result.published, ["bots"]);
-  assert.deepEqual(result.kept, ["money", "health", "host", "apple"]);
+  assert.deepEqual(result.kept, ["money", "health", "host", "apple", "decisions"]);
   assert.deepEqual(result.payload.extra, { preserved: true });
   assert.deepEqual(
     result.payload.bots,

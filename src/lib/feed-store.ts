@@ -4,6 +4,7 @@ export const FEED_DOMAINS = [
   "health",
   "host",
   "apple",
+  "decisions",
 ] as const;
 
 export type FeedDomain = (typeof FEED_DOMAINS)[number];
