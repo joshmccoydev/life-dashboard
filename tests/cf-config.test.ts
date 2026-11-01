@@ -86,3 +86,14 @@ test("preview wrangler config targets the OpenNext worker without exposing secre
     assert.equal(Object.hasOwn(config, key), false, `unexpected ${key}`);
   }
 });
+
+test("wrangler compatibility date is a supported ISO date", () => {
+  const source = readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8");
+  const config = JSON.parse(stripJsonComments(source)) as Record<string, unknown>;
+  const compatibilityDate = config.compatibility_date;
+
+  assert.equal(typeof compatibilityDate, "string");
+  assert.match(compatibilityDate as string, /^\d{4}-\d{2}-\d{2}$/);
+  assert.ok((compatibilityDate as string) >= "2024-09-23");
+  assert.ok((compatibilityDate as string) <= "2026-11-01");
+});
