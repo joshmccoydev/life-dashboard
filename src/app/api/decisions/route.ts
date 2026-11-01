@@ -1,3 +1,4 @@
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { join } from "node:path";
 import {
   DECISIONS_PATH,
@@ -5,7 +6,9 @@ import {
   buildSnapshot,
   checkToken,
   formatAnswerLine,
+  type Snapshot,
 } from "@/lib/decisions";
+import { readKvFeeds } from "@/lib/feed-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +25,62 @@ type Submission = {
   choice: Choice;
   reply: string;
 };
+
+type KvBinding = {
+  get(key: string): Promise<string | null>;
+};
+
+type RouteDependencies = {
+  env?: { FEEDS_KV?: KvBinding };
+  getCloudflareContext?: () =>
+    | { env: { FEEDS_KV?: KvBinding } }
+    | Promise<{ env: { FEEDS_KV?: KvBinding } }>;
+  snapshot?: () => Promise<Snapshot>;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isKvBinding(value: unknown): value is KvBinding {
+  return isRecord(value) && typeof value.get === "function";
+}
+
+async function resolveEnv(
+  dependencies: RouteDependencies,
+): Promise<RouteDependencies["env"]> {
+  if (dependencies.env) return dependencies.env;
+
+  try {
+    const context = await (
+      dependencies.getCloudflareContext ?? getCloudflareContext
+    )();
+    if (!isRecord(context) || !isRecord(context.env)) return undefined;
+    return {
+      FEEDS_KV: isKvBinding(context.env.FEEDS_KV)
+        ? context.env.FEEDS_KV
+        : undefined,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function isSnapshot(value: unknown): value is Snapshot {
+  return (
+    isRecord(value) &&
+    typeof value.generatedAt === "string" &&
+    typeof value.count === "number" &&
+    Array.isArray(value.cards)
+  );
+}
+
+function decisionSnapshotFromFeeds(incoming: unknown): Snapshot | null {
+  if (!isRecord(incoming) || !isRecord(incoming.decisions)) return null;
+
+  const data = incoming.decisions.data;
+  return isSnapshot(data) ? data : null;
+}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return Response.json(body, {
@@ -124,7 +183,10 @@ function validateSubmission(values: {
   };
 }
 
-export async function GET(request: Request): Promise<Response> {
+export async function GET(
+  request: Request,
+  context?: { params?: Promise<unknown> } & RouteDependencies,
+): Promise<Response> {
   if (
     !checkToken(
       requestToken(request),
@@ -135,7 +197,15 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
-    return jsonResponse(await buildSnapshot(snapshotOptions()));
+    const dependencies = context ?? {};
+    const build =
+      dependencies.snapshot ?? (() => buildSnapshot(snapshotOptions()));
+    const diskSnapshot = await build();
+    if (diskSnapshot.cards.length > 0) return jsonResponse(diskSnapshot);
+
+    const env = await resolveEnv(dependencies);
+    const feeds = await readKvFeeds(env?.FEEDS_KV);
+    return jsonResponse(decisionSnapshotFromFeeds(feeds) ?? diskSnapshot);
   } catch {
     return jsonResponse({ error: "internal server error" }, 500);
   }
