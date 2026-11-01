@@ -5,8 +5,10 @@ import { mergeFeeds, readKvFeeds } from "../src/lib/feed-store.ts";
 const DOMAINS = ["bots", "money", "health", "host", "apple"] as const;
 const NOW = new Date("2026-11-01T16:30:00.000Z");
 const RECENT = "2026-11-01T16:20:00.000Z";
-const EXACTLY_THIRTY_MINUTES_OLD = "2026-11-01T16:00:00.000Z";
 const OLDER_THAN_THIRTY_MINUTES = "2026-11-01T15:59:59.999Z";
+const EXACTLY_TWO_HOURS_OLD = "2026-11-01T14:30:00.000Z";
+const NINETY_MINUTES_OLD = "2026-11-01T15:00:00.000Z";
+const OLDER_THAN_TWO_HOURS = "2026-11-01T14:29:59.999Z";
 
 type Domain = (typeof DOMAINS)[number];
 type Source = "box" | "mac";
@@ -45,15 +47,18 @@ test("merges valid incoming entries for every supported domain", () => {
   }
 });
 
-test("marks only entries older than thirty minutes as stale", () => {
-  const atBoundary = feeds("boundary", EXACTLY_THIRTY_MINUTES_OLD);
-  const older = feeds("older", OLDER_THAN_THIRTY_MINUTES);
+test("marks only entries older than two hours as stale", () => {
+  const atBoundary = feeds("boundary", EXACTLY_TWO_HOURS_OLD);
+  const ninetyMinutesOld = feeds("ninety-minutes-old", NINETY_MINUTES_OLD);
+  const older = feeds("older", OLDER_THAN_TWO_HOURS);
 
   const boundaryResult = mergeFeeds(null, atBoundary, NOW);
-  const olderResult = mergeFeeds(null, { ...atBoundary, ...older }, NOW);
+  const ninetyMinutesOldResult = mergeFeeds(null, ninetyMinutesOld, NOW);
+  const olderResult = mergeFeeds(null, older, NOW);
 
   for (const domain of DOMAINS) {
     assert.equal(boundaryResult[domain].stale, false, domain);
+    assert.equal(ninetyMinutesOldResult[domain].stale, false, domain);
     assert.equal(olderResult[domain].stale, true, domain);
   }
 });
