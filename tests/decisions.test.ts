@@ -502,8 +502,19 @@ test("formatAnswerLine renders the canonical answer format", () => {
       reply: "ship it",
       at: new Date("2026-11-01T16:05:00.000Z"),
     }),
-    '- [x] 2026-11-01 10:05 CT — owner: Woz — Josh: "ship it" | choice: yes | q: Merge PR 2? | via: decisions app [id:d_abc]',
+    '- [x] 2026-11-01 10:05 CT — owner: Woz — Josh: "ship it" | choice: yes | q: Merge PR 2? | via: dash [id:d_abc]',
   );
+
+  const quotedReply = 'ok, "do it" now!';
+  const quotedReplyLine = M.formatAnswerLine({
+    id: "d_quoted",
+    bot: "Woz",
+    question: "Merge PR 2?",
+    choice: "yes",
+    reply: quotedReply,
+    at: new Date("2026-11-01T16:05:00.000Z"),
+  });
+  assert.ok(quotedReplyLine.includes(`Josh: "${quotedReply}"`));
 
   assert.equal(
     M.formatAnswerLine({
@@ -514,7 +525,7 @@ test("formatAnswerLine renders the canonical answer format", () => {
       reply: " \n ",
       at: new Date("2026-11-01T16:05:00.000Z"),
     }),
-    '- [x] 2026-11-01 10:05 CT — owner: Elon — Josh: "no" | choice: no | q: Proceed? | via: decisions app [id:d_empty]',
+    '- [x] 2026-11-01 10:05 CT — owner: Elon — Josh: "no" | choice: no | q: Proceed? | via: dash [id:d_empty]',
   );
 
   assert.equal(
@@ -526,8 +537,89 @@ test("formatAnswerLine renders the canonical answer format", () => {
       reply: "ship\n\n it",
       at: new Date("2026-11-01T16:05:00.000Z"),
     }),
-    '- [x] 2026-11-01 10:05 CT — owner: Alfred — Josh: "ship it" | choice: yes | q: Ship next? | via: decisions app [id:d_newline]',
+    '- [x] 2026-11-01 10:05 CT — owner: Alfred — Josh: "ship it" | choice: yes | q: Ship next? | via: dash [id:d_newline]',
   );
+});
+
+test("appendAnswer appends formatted answers without modifying existing bytes", async (t) => {
+  const root = await temporaryDirectory(t, "cto-decisions-append-only-");
+  const decisionsFile = path.join(root, "Decisions.md");
+  const uncheckedLine =
+    "- [ ] 2026-11-01 09:30 CT | owner: Woz | q: Keep this open?";
+  const originalText = [
+    "# Decisions",
+    "- [x] 2026-10-31 09:00 CT | owner: Don | Already answered",
+    uncheckedLine,
+    "- [x] 2026-10-31 10:00 CT | owner: Alfred | Final existing line",
+  ].join("\n");
+  const answerOne = M.formatAnswerLine({
+    id: "d_append_one",
+    bot: "Woz",
+    question: "First question?",
+    choice: "yes",
+    reply: "ship it",
+    at: new Date("2026-11-01T16:05:00.000Z"),
+  });
+  const answerTwo = M.formatAnswerLine({
+    id: "d_append_two",
+    bot: "Don",
+    question: "Second question?",
+    choice: "no",
+    reply: "hold it",
+    at: new Date("2026-11-01T16:06:00.000Z"),
+  });
+
+  await writeFile(decisionsFile, originalText);
+  const originalBytes = await readFile(decisionsFile);
+
+  assert.deepEqual(
+    await M.appendAnswer({
+      decisionsFile,
+      line: answerOne,
+      id: "d_append_one",
+    }),
+    { added: true },
+  );
+  assert.deepEqual(
+    await M.appendAnswer({
+      decisionsFile,
+      line: answerTwo,
+      id: "d_append_two",
+    }),
+    { added: true },
+  );
+
+  const afterTwoAppends = await readFile(decisionsFile);
+  const prefixLength = originalBytes.length + 1;
+  assert.deepEqual(
+    afterTwoAppends.subarray(0, prefixLength),
+    Buffer.concat([originalBytes, Buffer.from("\n")]),
+  );
+
+  const appendedText = afterTwoAppends.subarray(prefixLength).toString("utf8");
+  const appendedLines = appendedText.split("\n");
+  assert.equal(appendedLines.pop(), "");
+  assert.equal(appendedLines.length, 2);
+  for (const line of appendedLines) {
+    assert.ok(line.includes("via: dash"));
+  }
+  const afterTwoAppendsText = afterTwoAppends.toString("utf8");
+  assert.ok(afterTwoAppendsText.includes(uncheckedLine));
+  assert.equal(
+    afterTwoAppendsText.includes(uncheckedLine.replace("- [ ]", "- [x]")),
+    false,
+  );
+
+  const beforeDuplicate = await readFile(decisionsFile);
+  assert.deepEqual(
+    await M.appendAnswer({
+      decisionsFile,
+      line: answerOne,
+      id: "d_append_one",
+    }),
+    { added: false },
+  );
+  assert.deepEqual(await readFile(decisionsFile), beforeDuplicate);
 });
 
 test("appendAnswer preserves bytes and avoids duplicate ids", async (t) => {
