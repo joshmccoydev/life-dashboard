@@ -175,6 +175,14 @@ async function findSigningKey(
   fetchImpl: typeof fetch,
   now: number,
 ): Promise<JsonWebKey | null> {
+  if (
+    certificateCache === null &&
+    lastForcedRefreshAt !== null &&
+    now - lastForcedRefreshAt < FORCED_REFRESH_COOLDOWN_MS
+  ) {
+    throw new Error("Certificate refresh is cooling down");
+  }
+
   let keys = await getAccessKeys(fetchImpl, false, now);
   let key = keys.get(kid);
 
@@ -267,10 +275,16 @@ export async function verifyAccessJwt(
       certificateCache === null
         ? null
         : options.now - certificateCache.cachedAt;
-    if (cacheAge === null || cacheAge < FORCED_REFRESH_COOLDOWN_MS) {
+    if (
+      cacheAge === null ||
+      cacheAge < FORCED_REFRESH_COOLDOWN_MS ||
+      (lastForcedRefreshAt !== null &&
+        options.now - lastForcedRefreshAt < FORCED_REFRESH_COOLDOWN_MS)
+    ) {
       return { ok: false, reason: "signature" };
     }
 
+    lastForcedRefreshAt = options.now;
     const refreshedKeys = await getAccessKeys(
       options.fetchImpl,
       true,
