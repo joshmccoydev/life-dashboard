@@ -2,6 +2,15 @@
 
 No deployments, Cloudflare Access changes, or DNS changes may proceed without Josh's yes.
 
+## Seed local KV from fixture
+
+Seed a local preview KV namespace from the synthetic fixture. This fixture data is for local previews only and must never be written to production KV.
+
+```sh
+export WRANGLER_CACHE_DIR=/tmp/wrcache
+npx wrangler kv key put feeds --binding FEEDS_KV --local --path tests/fixtures/preview-feeds.json
+```
+
 ## Preview build
 
 Build the preview bundle from the repository root:
