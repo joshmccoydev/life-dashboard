@@ -625,7 +625,7 @@ export function mergeForPublish(
   const kept: string[] = [];
 
   for (const domain of FEED_DOMAINS) {
-    if (snapshot[domain].data !== null) {
+    if (snapshot[domain].data !== null && !snapshot[domain].error) {
       payload[domain] = current[domain];
       published.push(domain);
     } else {
