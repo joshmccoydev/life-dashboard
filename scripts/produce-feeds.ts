@@ -2,6 +2,10 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import {
+  buildSnapshot as buildDecisionSnapshot,
+  type Snapshot as DecisionSnapshot,
+} from "../src/lib/decisions";
 
 export type Entry = {
   data: unknown;
@@ -17,14 +21,31 @@ export type Snapshot = {
   health: Entry;
   host: Entry;
   apple: Entry;
+  decisions?: Entry;
 };
 
 export type KvDeps = {
   kvGet: () => string | null;
   kvPut: (json: string) => void;
-  build?: () => Snapshot;
+  build?: () => Snapshot | PromiseLike<Snapshot>;
   out?: (line: string) => void;
 };
+
+export type DecisionsResult = {
+  ok: boolean;
+  data: DecisionSnapshot | null;
+  updatedAt: string | null;
+  source: "box:decisions";
+  error?: string;
+};
+
+export type BuiltSnapshot = Snapshot & {
+  decisions: DecisionsResult;
+};
+
+export type SnapshotPromise = BuiltSnapshot & PromiseLike<BuiltSnapshot>;
+
+export const DECISIONS_LIMIT = 50;
 
 export const MONEY_ALLOWED_KEYS = [
   "cashOnHand",
@@ -222,6 +243,43 @@ function readErrorReason(error: unknown): string {
     return error.code;
   }
   return "read failed";
+}
+
+export async function buildDecisions(options: {
+  vaultDir?: string;
+  remindersFile?: string;
+  now: Date;
+}): Promise<DecisionsResult> {
+  const vaultDir =
+    options.vaultDir ?? process.env.DECISIONS_VAULT ?? "/workspace/vault";
+  const remindersFile =
+    options.remindersFile ??
+    process.env.DECISIONS_REMINDERS ??
+    "/workspace/reminders-queue.md";
+
+  try {
+    const snapshot = await buildDecisionSnapshot({
+      vaultDir,
+      remindersFile,
+      now: options.now,
+    });
+    const cards = snapshot.cards.slice(0, DECISIONS_LIMIT);
+
+    return {
+      ok: true,
+      data: { ...snapshot, cards, count: cards.length },
+      updatedAt: options.now.toISOString(),
+      source: "box:decisions",
+    };
+  } catch {
+    return {
+      ok: false,
+      data: null,
+      updatedAt: null,
+      source: "box:decisions",
+      error: "decisions build failed",
+    };
+  }
 }
 
 function jsonEntry(
@@ -459,7 +517,7 @@ export function buildSnapshot(
     loadavg?: () => number[];
     now?: Date;
   } = {},
-): Snapshot {
+): SnapshotPromise {
   const paths: FeedPaths = { ...DEFAULT_PATHS, ...opts.paths };
   const readFile = opts.readFile ?? fs.readFileSync;
   const run: RunCommand =
@@ -475,8 +533,7 @@ export function buildSnapshot(
   let money = readJsonEntry(paths.money, "box:buffett", readFile);
   if (money.data !== null) {
     const cash = isRecord(money.data) ? money.data.cash_on_hand : null;
-    const hasValidCash =
-      isRecord(cash) && finiteNumber(cash.amount) !== null;
+    const hasValidCash = isRecord(cash) && finiteNumber(cash.amount) !== null;
     const hasBills =
       isRecord(money.data) && Array.isArray(money.data.next_bills);
     if (!hasValidCash || !hasBills) {
@@ -489,7 +546,7 @@ export function buildSnapshot(
   }
   const health = readJsonEntry(paths.health, "box:arnold", readFile);
 
-  return {
+  const snapshot: BuiltSnapshot = {
     bots: buildBots(paths, readFile, fs.statSync, now),
     money:
       money.data === null
@@ -501,7 +558,30 @@ export function buildSnapshot(
         : { ...health, data: summarizeHealth(health.data) },
     host: buildHost({ run, uptime, loadavg, now }),
     apple: buildApple(paths, readFile),
+    decisions: {
+      ok: false,
+      data: null,
+      updatedAt: null,
+      source: "box:decisions",
+      error: "decisions pending",
+    },
   };
+  let settled: Promise<BuiltSnapshot> | null = null;
+  const settle = (): Promise<BuiltSnapshot> => {
+    settled ??= buildDecisions({ now }).then((decisions) => ({
+      ...snapshot,
+      decisions,
+    }));
+    return settled;
+  };
+  const then: PromiseLike<BuiltSnapshot>["then"] = (onfulfilled, onrejected) =>
+    settle().then(onfulfilled, onrejected);
+
+  Object.defineProperty(snapshot, "then", {
+    value: then,
+    enumerable: false,
+  });
+  return snapshot as SnapshotPromise;
 }
 
 export function toKvPayload(snapshot: Snapshot): Record<
@@ -513,8 +593,8 @@ export function toKvPayload(snapshot: Snapshot): Record<
     source: "box" | "mac" | null;
   }
 > {
-  const entry = (current: Entry, source: "box" | "mac") =>
-    current.data === null
+  const entry = (current: Entry | undefined, source: "box" | "mac") =>
+    current === undefined || current.data === null
       ? {
           data: null,
           updatedAt: null,
@@ -534,6 +614,7 @@ export function toKvPayload(snapshot: Snapshot): Record<
     health: entry(snapshot.health, "box"),
     host: entry(snapshot.host, "box"),
     apple: entry(snapshot.apple, "mac"),
+    decisions: entry(snapshot.decisions, "box"),
   };
 }
 
@@ -565,12 +646,26 @@ export function summarize(snapshot: Snapshot): Record<
     };
   };
 
+  const decisions =
+    snapshot.decisions ??
+    ({
+      data: null,
+      updatedAt: null,
+      source: "box:decisions",
+    } satisfies Entry);
+  const decisionsSummary = summarizeEntry(decisions);
+  const decisionsCount =
+    isRecord(decisions.data) && Array.isArray(decisions.data.cards)
+      ? decisions.data.cards.length
+      : 0;
+
   return {
     bots: summarizeEntry(snapshot.bots),
     money: summarizeEntry(snapshot.money),
     health: summarizeEntry(snapshot.health),
     host: summarizeEntry(snapshot.host),
     apple: summarizeEntry(snapshot.apple),
+    decisions: { ...decisionsSummary, count: decisionsCount },
   };
 }
 
@@ -601,7 +696,14 @@ export function shouldPublish(snapshot: Snapshot): {
   return { ok: failed.length === 0, failed };
 }
 
-const FEED_DOMAINS = ["bots", "money", "health", "host", "apple"] as const;
+const FEED_DOMAINS = [
+  "bots",
+  "money",
+  "health",
+  "host",
+  "apple",
+  "decisions",
+] as const;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (!isRecord(value)) return false;
@@ -625,7 +727,12 @@ export function mergeForPublish(
   const kept: string[] = [];
 
   for (const domain of FEED_DOMAINS) {
-    if (snapshot[domain].data !== null && !snapshot[domain].error) {
+    const currentEntry = snapshot[domain];
+    if (
+      currentEntry !== undefined &&
+      currentEntry.data !== null &&
+      !currentEntry.error
+    ) {
       payload[domain] = current[domain];
       published.push(domain);
     } else {
@@ -685,8 +792,7 @@ function defaultKvPut(json: string): void {
   }
 }
 
-export function main(argv: string[], deps?: KvDeps): number {
-  const snapshot = (deps?.build ?? buildSnapshot)();
+function runMain(argv: string[], snapshot: Snapshot, deps?: KvDeps): number {
   const out =
     deps?.out ?? ((line: string) => process.stdout.write(`${line}\n`));
   const finish = (code: number): number => {
@@ -743,6 +849,36 @@ export function main(argv: string[], deps?: KvDeps): number {
   return finish(0);
 }
 
+function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+  return (
+    (typeof value === "object" || typeof value === "function") &&
+    value !== null &&
+    typeof (value as { then?: unknown }).then === "function"
+  );
+}
+
+export function main(
+  argv: string[],
+  deps: KvDeps & { build: () => Snapshot },
+): number;
+export function main(argv: string[], deps?: KvDeps): number | Promise<number>;
+export function main(argv: string[], deps?: KvDeps): number | Promise<number> {
+  const built = (deps?.build ?? buildSnapshot)();
+  if (isPromiseLike<Snapshot>(built)) {
+    return Promise.resolve(built).then((snapshot) =>
+      runMain(argv, snapshot, deps),
+    );
+  }
+  return runMain(argv, built, deps);
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
-  process.exitCode = main(process.argv.slice(2));
+  const result = main(process.argv.slice(2));
+  if (isPromiseLike<number>(result)) {
+    void Promise.resolve(result).then((code) => {
+      process.exitCode = code;
+    });
+  } else {
+    process.exitCode = result;
+  }
 }
