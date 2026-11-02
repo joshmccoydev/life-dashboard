@@ -9,6 +9,7 @@ import {
   summarize,
   undoChoice,
   type ActionsKv,
+  type DecisionAction,
 } from "../src/lib/decision-actions";
 
 class FakeActionsKv implements ActionsKv {
@@ -131,6 +132,42 @@ test("undoChoice marks a chosen action undone and returns null for unknown ids",
     ),
     null,
   );
+});
+
+test("undoChoice preserves the 200-action storage limit", async () => {
+  const kv = new FakeActionsKv();
+  const recordedActions: DecisionAction[] = [];
+
+  for (let index = 1; index <= 205; index += 1) {
+    recordedActions.push(
+      await recordChoice(
+        kv,
+        {
+          decisionId: `d_synthetic_${index}`,
+          bot: "Synthetic Bot",
+          question: `Synthetic decision ${index}?`,
+          choice: "later",
+          reply: "",
+        },
+        new Date("2026-11-02T15:24:00.000Z"),
+      ),
+    );
+  }
+  assert.equal(recordedActions.length, 205);
+  await kv.put(ACTIONS_KEY, JSON.stringify(recordedActions));
+
+  const newestAction = recordedActions.at(-1);
+  assert.ok(newestAction);
+
+  await undoChoice(
+    kv,
+    newestAction.decisionId,
+    new Date("2026-11-02T15:25:00.000Z"),
+  );
+
+  const raw = kv.values.get(ACTIONS_KEY);
+  assert.ok(raw);
+  assert.ok(parseActions(raw).length <= 200);
 });
 
 test("summarize keeps the first sentence, caps long text, and preserves short text", () => {
