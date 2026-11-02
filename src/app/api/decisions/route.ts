@@ -8,6 +8,11 @@ import {
   type Snapshot,
 } from "@/lib/decisions";
 import { isAccessAuthorized } from "@/lib/access-auth";
+import {
+  isSameOrigin,
+  recordChoice,
+  undoChoice,
+} from "@/lib/decision-actions";
 import { readKvFeeds } from "@/lib/feed-store";
 
 export const runtime = "nodejs";
@@ -22,12 +27,13 @@ type Choice = "yes" | "no" | "later" | "reply";
 
 type Submission = {
   id: string;
-  choice: Choice;
+  choice: Choice | "undo";
   reply: string;
 };
 
 type KvBinding = {
   get(key: string): Promise<string | null>;
+  put?(key: string, value: string): Promise<void>;
 };
 
 type RouteDependencies = {
@@ -46,6 +52,12 @@ function isKvBinding(value: unknown): value is KvBinding {
   return isRecord(value) && typeof value.get === "function";
 }
 
+function isWritableKv(
+  value: KvBinding | undefined,
+): value is KvBinding & { put(key: string, value: string): Promise<void> } {
+  return typeof value?.put === "function";
+}
+
 async function resolveEnv(
   dependencies: RouteDependencies,
 ): Promise<RouteDependencies["env"]> {
@@ -58,7 +70,12 @@ async function resolveEnv(
     if (!isRecord(context) || !isRecord(context.env)) return undefined;
     return {
       FEEDS_KV: isKvBinding(context.env.FEEDS_KV)
-        ? context.env.FEEDS_KV
+        ? {
+            get: context.env.FEEDS_KV.get,
+            ...(typeof context.env.FEEDS_KV.put === "function"
+              ? { put: context.env.FEEDS_KV.put }
+              : {}),
+          }
         : undefined,
     };
   } catch {
@@ -103,13 +120,13 @@ function isAuthorized(request: Request): Promise<boolean> {
   });
 }
 
-function snapshotOptions() {
+function snapshotOptions(now = new Date()) {
   return {
     vaultDir: process.env.DECISIONS_VAULT ?? "/workspace/vault",
     remindersFile:
       process.env.DECISIONS_REMINDERS ??
       "/workspace/reminders-queue.md",
-    now: new Date(),
+    now,
   };
 }
 
@@ -124,7 +141,7 @@ function validateSubmission(values: {
     typeof values.id !== "string" ||
     !values.id ||
     typeof values.choice !== "string" ||
-    typeof values.reply !== "string"
+    (values.reply !== undefined && typeof values.reply !== "string")
   ) {
     return { submission: null, error: "invalid request" };
   }
@@ -133,12 +150,14 @@ function validateSubmission(values: {
     values.choice !== "yes" &&
     values.choice !== "no" &&
     values.choice !== "later" &&
-    values.choice !== "reply"
+    values.choice !== "reply" &&
+    values.choice !== "undo"
   ) {
     return { submission: null, error: "invalid choice" };
   }
 
-  if (values.reply.length > 500) {
+  const reply = values.reply ?? "";
+  if (reply.length > 500) {
     return { submission: null, error: "reply too long" };
   }
 
@@ -146,7 +165,7 @@ function validateSubmission(values: {
     submission: {
       id: values.id,
       choice: values.choice,
-      reply: values.reply,
+      reply,
     },
     error: null,
   };
@@ -175,10 +194,21 @@ export async function GET(
   }
 }
 
-export async function POST(request: Request): Promise<Response> {
+export async function POST(
+  request: Request,
+  context?: { params?: Promise<unknown> } & RouteDependencies,
+): Promise<Response> {
   try {
     if (!(await isAuthorized(request))) {
       return unauthorizedResponse();
+    }
+
+    const isDirectLegacyCall =
+      context === undefined &&
+      request.headers.get("origin") === null &&
+      request.headers.get("sec-fetch-site") === null;
+    if (!isSameOrigin(request) && !isDirectLegacyCall) {
+      return jsonResponse({ error: "cross-origin" }, 403);
     }
 
     const contentType =
@@ -228,13 +258,78 @@ export async function POST(request: Request): Promise<Response> {
       return jsonResponse({ error: result.error }, 400);
     }
 
-    const options = snapshotOptions();
-    const snapshot = await buildSnapshot(options);
-    const card = snapshot.cards.find(
-      (candidate) => candidate.id === result.submission.id,
+    const submission = result.submission;
+    const dependencies = context ?? {};
+    const now = new Date();
+    const options = snapshotOptions(now);
+    const env = await resolveEnv(dependencies);
+    const kv = env?.FEEDS_KV;
+
+    if (submission.choice === "undo") {
+      if (!isWritableKv(kv)) {
+        return jsonResponse({ error: "decision not found" }, 404);
+      }
+
+      const action = await undoChoice(kv, submission.id, now);
+      if (!action) {
+        return jsonResponse({ error: "decision not found" }, 404);
+      }
+
+      if (form) {
+        return new Response(null, {
+          status: 303,
+          headers: {
+            ...RESPONSE_HEADERS,
+            Location: "/decisions",
+          },
+        });
+      }
+
+      return jsonResponse({ ok: true, status: action.status });
+    }
+
+    const build =
+      dependencies.snapshot ?? (() => buildSnapshot(options));
+    const diskSnapshot = await build();
+    let card = diskSnapshot.cards.find(
+      (candidate) => candidate.id === submission.id,
     );
+
+    if (!card) {
+      const feeds = await readKvFeeds(kv);
+      card = decisionSnapshotFromFeeds(feeds)?.cards.find(
+        (candidate) => candidate.id === submission.id,
+      );
+    }
+
     if (!card) {
       return jsonResponse({ error: "decision not found" }, 404);
+    }
+
+    if (isWritableKv(kv)) {
+      const action = await recordChoice(
+        kv,
+        {
+          decisionId: card.id,
+          bot: card.bot,
+          question: card.question,
+          choice: submission.choice,
+          reply: submission.reply,
+        },
+        now,
+      );
+
+      if (form) {
+        return new Response(null, {
+          status: 303,
+          headers: {
+            ...RESPONSE_HEADERS,
+            Location: "/decisions",
+          },
+        });
+      }
+
+      return jsonResponse({ ok: true, status: action.status });
     }
 
     const answer = await appendAnswer({
@@ -243,11 +338,11 @@ export async function POST(request: Request): Promise<Response> {
         id: card.id,
         bot: card.bot,
         question: card.question,
-        choice: result.submission.choice,
-        reply: result.submission.reply,
-        at: new Date(),
+        choice: submission.choice,
+        reply: submission.reply,
+        at: now,
       }),
-      id: result.submission.id,
+      id: submission.id,
     });
 
     if (form) {
