@@ -25,6 +25,7 @@ type ProcessedStatus = DecisionAction["status"];
 type ProcessedState = {
   keys: Set<string>;
   legacy: Map<string, ProcessedStatus>;
+  format: "array" | "map";
 };
 
 const DECISIONS_PATH = path.join("03 Resources", "_Meta", "Decisions.md");
@@ -76,14 +77,14 @@ async function readProcessedState(
 ): Promise<ProcessedState> {
   const raw = await readTextIfPresent(statePath);
   if (raw === null) {
-    return { keys: new Set(), legacy: new Map() };
+    return { keys: new Set(), legacy: new Map(), format: "array" };
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return { keys: new Set(), legacy: new Map() };
+    return { keys: new Set(), legacy: new Map(), format: "array" };
   }
 
   if (Array.isArray(parsed)) {
@@ -92,19 +93,25 @@ async function readProcessedState(
         parsed.filter((value): value is string => typeof value === "string"),
       ),
       legacy: new Map(),
+      format: "array",
     };
   }
 
   if (!isRecord(parsed)) {
-    return { keys: new Set(), legacy: new Map() };
+    return { keys: new Set(), legacy: new Map(), format: "array" };
   }
 
   const state: ProcessedState = {
-    keys: new Set(Object.keys(parsed)),
+    keys: new Set(),
     legacy: new Map(),
+    format: "map",
   };
   for (const [decisionId, status] of Object.entries(parsed)) {
-    if (isProcessedStatus(status)) state.legacy.set(decisionId, status);
+    if (isProcessedStatus(status)) {
+      state.legacy.set(decisionId, status);
+    } else {
+      state.keys.add(decisionId);
+    }
   }
   return state;
 }
@@ -114,9 +121,20 @@ async function writeProcessedState(
   state: ProcessedState,
 ): Promise<void> {
   await mkdir(path.dirname(statePath), { recursive: true });
+  let serialized: unknown;
+  if (state.format === "array") {
+    serialized = [...state.keys];
+  } else {
+    const serializedMap: Record<string, true | ProcessedStatus> = {};
+    for (const key of state.keys) serializedMap[key] = true;
+    for (const [decisionId, status] of state.legacy) {
+      serializedMap[decisionId] = status;
+    }
+    serialized = serializedMap;
+  }
   await writeFile(
     statePath,
-    `${JSON.stringify([...state.keys], null, 2)}\n`,
+    `${JSON.stringify(serialized, null, 2)}\n`,
     "utf8",
   );
 }
