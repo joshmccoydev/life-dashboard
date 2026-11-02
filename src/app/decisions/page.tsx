@@ -2,6 +2,11 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { headers } from "next/headers";
 import type { CSSProperties, ReactNode } from "react";
 import { verifyAccessJwt } from "@/lib/access-auth";
+import {
+  ACTIONS_KEY,
+  parseActions,
+  summarize,
+} from "@/lib/decision-actions";
 import { buildSnapshot, type Snapshot } from "@/lib/decisions";
 import { readKvFeeds } from "@/lib/feed-store";
 
@@ -209,6 +214,15 @@ const styles = {
     color: "#82b7ff",
     textDecoration: "underline",
   },
+  chosen: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 10,
+    color: "#c7c7ce",
+    lineHeight: 1.45,
+    overflowWrap: "anywhere",
+  },
   reply: {
     width: "100%",
     minHeight: 44,
@@ -267,16 +281,30 @@ export async function DecisionsPageContent(
       }))
   )();
   let snapshot = diskSnapshot;
+  let env: DecisionsPageDependencies["env"];
 
   if (diskSnapshot.cards.length === 0) {
     try {
-      const env = await resolveEnv(dependencies);
+      env = await resolveEnv(dependencies);
       const feeds = await readKvFeeds(env?.FEEDS_KV);
       snapshot = decisionSnapshotFromFeeds(feeds) ?? diskSnapshot;
     } catch {
       snapshot = diskSnapshot;
     }
   }
+
+  let actions: ReturnType<typeof parseActions> = [];
+  try {
+    env ??= await resolveEnv(dependencies);
+    if (env?.FEEDS_KV) {
+      actions = parseActions(await env.FEEDS_KV.get(ACTIONS_KEY));
+    }
+  } catch {
+    actions = [];
+  }
+  const actionsByDecision = new Map(
+    actions.map((action) => [action.decisionId, action]),
+  );
 
   return (
     <main style={styles.page}>
@@ -295,6 +323,10 @@ export async function DecisionsPageContent(
               card.createdAt,
               snapshot.generatedAt,
             );
+            const questionSummary = summarize(card.question);
+            const action = actionsByDecision.get(card.id);
+            const chosenAction =
+              action?.status === "chosen" ? action : undefined;
 
             return (
               <form
@@ -325,7 +357,13 @@ export async function DecisionsPageContent(
                   {age ? <span style={styles.age}>{age}</span> : null}
                 </div>
 
-                <strong style={styles.question}>{card.question}</strong>
+                <strong style={styles.question}>{questionSummary}</strong>
+                {questionSummary !== card.question ? (
+                  <details style={styles.details}>
+                    <summary style={styles.detailsLink}>more</summary>
+                    <span>{card.question}</span>
+                  </details>
+                ) : null}
 
                 {card.rec ? <p style={styles.rec}>rec: {card.rec}</p> : null}
                 {card.context ? (
@@ -349,49 +387,65 @@ export async function DecisionsPageContent(
                   </p>
                 ) : null}
 
-                <input
-                  type="text"
-                  name="reply"
-                  maxLength={500}
-                  placeholder="reply (optional)"
-                  aria-label="reply"
-                  style={styles.reply}
-                />
+                {chosenAction ? (
+                  <div style={styles.chosen}>
+                    <span>{`chosen: ${chosenAction.choice}`}</span>
+                    <button
+                      type="submit"
+                      name="choice"
+                      value="undo"
+                      style={styles.button}
+                    >
+                      undo
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      name="reply"
+                      maxLength={500}
+                      placeholder="reply (optional)"
+                      aria-label="reply"
+                      style={styles.reply}
+                    />
 
-                <div style={styles.actions}>
-                  <button
-                    type="submit"
-                    name="choice"
-                    value="yes"
-                    style={styles.button}
-                  >
-                    yes
-                  </button>
-                  <button
-                    type="submit"
-                    name="choice"
-                    value="no"
-                    style={styles.button}
-                  >
-                    no
-                  </button>
-                  <button
-                    type="submit"
-                    name="choice"
-                    value="later"
-                    style={styles.button}
-                  >
-                    later
-                  </button>
-                  <button
-                    type="submit"
-                    name="choice"
-                    value="reply"
-                    style={styles.button}
-                  >
-                    reply
-                  </button>
-                </div>
+                    <div style={styles.actions}>
+                      <button
+                        type="submit"
+                        name="choice"
+                        value="yes"
+                        style={styles.button}
+                      >
+                        yes
+                      </button>
+                      <button
+                        type="submit"
+                        name="choice"
+                        value="no"
+                        style={styles.button}
+                      >
+                        no
+                      </button>
+                      <button
+                        type="submit"
+                        name="choice"
+                        value="later"
+                        style={styles.button}
+                      >
+                        later
+                      </button>
+                      <button
+                        type="submit"
+                        name="choice"
+                        value="reply"
+                        style={styles.button}
+                      >
+                        reply
+                      </button>
+                    </div>
+                  </>
+                )}
               </form>
             );
           })
