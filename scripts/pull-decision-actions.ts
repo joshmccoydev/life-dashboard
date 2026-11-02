@@ -22,6 +22,10 @@ type PullDependencies = {
 };
 
 type ProcessedStatus = DecisionAction["status"];
+type ProcessedState = {
+  keys: Set<string>;
+  legacy: Map<string, ProcessedStatus>;
+};
 
 const DECISIONS_PATH = path.join("03 Resources", "_Meta", "Decisions.md");
 const ACTIONS_PATH = path.join(
@@ -69,33 +73,52 @@ async function readTextIfPresent(file: string): Promise<string | null> {
 
 async function readProcessedState(
   statePath: string,
-): Promise<Map<string, ProcessedStatus>> {
+): Promise<ProcessedState> {
   const raw = await readTextIfPresent(statePath);
-  if (raw === null) return new Map();
+  if (raw === null) {
+    return { keys: new Set(), legacy: new Map() };
+  }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return new Map();
+    return { keys: new Set(), legacy: new Map() };
   }
 
-  if (!isRecord(parsed)) return new Map();
+  if (Array.isArray(parsed)) {
+    return {
+      keys: new Set(
+        parsed.filter((value): value is string => typeof value === "string"),
+      ),
+      legacy: new Map(),
+    };
+  }
 
-  const state = new Map<string, ProcessedStatus>();
+  if (!isRecord(parsed)) {
+    return { keys: new Set(), legacy: new Map() };
+  }
+
+  const state: ProcessedState = {
+    keys: new Set(Object.keys(parsed)),
+    legacy: new Map(),
+  };
   for (const [decisionId, status] of Object.entries(parsed)) {
-    if (isProcessedStatus(status)) state.set(decisionId, status);
+    if (isProcessedStatus(status)) state.legacy.set(decisionId, status);
   }
   return state;
 }
 
 async function writeProcessedState(
   statePath: string,
-  state: Map<string, ProcessedStatus>,
+  state: ProcessedState,
 ): Promise<void> {
   await mkdir(path.dirname(statePath), { recursive: true });
-  const object = Object.fromEntries(state);
-  await writeFile(statePath, `${JSON.stringify(object, null, 2)}\n`, "utf8");
+  await writeFile(
+    statePath,
+    `${JSON.stringify([...state.keys], null, 2)}\n`,
+    "utf8",
+  );
 }
 
 async function appendLine(file: string, line: string): Promise<void> {
@@ -125,6 +148,16 @@ function oneLine(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
+function actionKey(action: DecisionAction): string {
+  const timestamp =
+    action.status === "undone" ? action.undoneAt : action.ts;
+  return `${action.decisionId}:${action.status}:${timestamp ?? ""}`;
+}
+
+function actionMarker(key: string): string {
+  return `[act:${key}]`;
+}
+
 function chosenActionLine(
   action: DecisionAction,
   stamp: string,
@@ -146,6 +179,23 @@ function undoneLines(
   };
 }
 
+async function appendActionLine(
+  file: string,
+  line: string,
+  marker: string,
+): Promise<boolean> {
+  const content = await readTextIfPresent(file);
+  if (content?.includes(marker)) return false;
+
+  await mkdir(path.dirname(file), { recursive: true });
+  const separator =
+    content !== null && content.length > 0 && !content.endsWith("\n")
+      ? "\n"
+      : "";
+  await appendFile(file, `${separator}${line}\n`, "utf8");
+  return true;
+}
+
 export async function pullActions(
   deps: PullDependencies,
 ): Promise<{ appended: number }> {
@@ -159,32 +209,59 @@ export async function pullActions(
   let appended = 0;
 
   for (const action of actions) {
-    if (processed.get(action.decisionId) === action.status) continue;
-
-    if (action.status === "chosen") {
-      await appendLine(
-        decisionsFile,
-        formatAnswerLine({
-          id: action.decisionId,
-          bot: action.bot,
-          question: action.question,
-          choice: action.choice,
-          reply: action.reply,
-          at: deps.now,
-        }),
-      );
-      await ensureActionsFile(actionsFile);
-      await appendLine(actionsFile, chosenActionLine(action, stamp));
-    } else {
-      const lines = undoneLines(action, stamp);
-      await appendLine(decisionsFile, lines.decisions);
-      await ensureActionsFile(actionsFile);
-      await appendLine(actionsFile, lines.actions);
+    const key = actionKey(action);
+    if (
+      processed.keys.has(key) ||
+      processed.legacy.get(action.decisionId) === action.status
+    ) {
+      continue;
     }
 
-    processed.set(action.decisionId, action.status);
+    const marker = actionMarker(key);
+    let changed = false;
+
+    if (action.status === "chosen") {
+      changed =
+        (await appendActionLine(
+          decisionsFile,
+          `${formatAnswerLine({
+            id: action.decisionId,
+            bot: action.bot,
+            question: action.question,
+            choice: action.choice,
+            reply: action.reply,
+            at: deps.now,
+          })} ${marker}`,
+          marker,
+        )) || changed;
+      await ensureActionsFile(actionsFile);
+      changed =
+        (await appendActionLine(
+          actionsFile,
+          `${chosenActionLine(action, stamp)} ${marker}`,
+          marker,
+        )) || changed;
+    } else {
+      const lines = undoneLines(action, stamp);
+      changed =
+        (await appendActionLine(
+          decisionsFile,
+          `${lines.decisions} ${marker}`,
+          marker,
+        )) || changed;
+      await ensureActionsFile(actionsFile);
+      changed =
+        (await appendActionLine(
+          actionsFile,
+          `${lines.actions} ${marker}`,
+          marker,
+        )) || changed;
+    }
+
+    processed.keys.add(key);
+    processed.legacy.delete(action.decisionId);
     await writeProcessedState(deps.statePath, processed);
-    appended += 1;
+    if (changed) appended += 1;
   }
 
   return { appended };
