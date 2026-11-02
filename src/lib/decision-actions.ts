@@ -145,7 +145,7 @@ export async function undoChoice(
     undoneAt: now.toISOString(),
   };
   actions[index] = updated;
-  await kv.put(ACTIONS_KEY, JSON.stringify(actions));
+  await kv.put(ACTIONS_KEY, JSON.stringify(actions.slice(-200)));
   return updated;
 }
 
