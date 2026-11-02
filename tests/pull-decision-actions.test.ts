@@ -146,6 +146,116 @@ test("pullActions appends chosen and undone actions once", async (t) => {
   assert.equal(await readFile(fixture.actionsPath, "utf8"), actionLog);
 });
 
+test("pullActions uses action markers when the state file is lost", async (t) => {
+  const fixture = await createPullFixture(
+    t,
+    "pull-decision-actions-replay-",
+  );
+  const action: DecisionAction = {
+    decisionId: "d_synthetic_replay",
+    bot: "Woz",
+    question: "Synthetic replay decision?",
+    choice: "yes",
+    reply: "",
+    ts: "2026-11-02T15:15:00.000Z",
+    status: "chosen",
+  };
+  const readRaw = async (): Promise<string> => JSON.stringify([action]);
+
+  const first = await pullActions({
+    readRaw,
+    vaultDir: fixture.vaultDir,
+    statePath: fixture.statePath,
+    now: NOW,
+  });
+
+  assert.equal(first.appended, 1);
+
+  const decisions = await readFile(fixture.decisionsPath, "utf8");
+  const actionLog = await readFile(fixture.actionsPath, "utf8");
+  const marker =
+    "[act:d_synthetic_replay:chosen:2026-11-02T15:15:00.000Z]";
+  assert.ok(decisions.includes(marker));
+  assert.ok(actionLog.includes(marker));
+
+  await rm(fixture.statePath, { force: true });
+
+  const replay = await pullActions({
+    readRaw,
+    vaultDir: fixture.vaultDir,
+    statePath: fixture.statePath,
+    now: NOW,
+  });
+
+  assert.equal(replay.appended, 0);
+  assert.equal(await readFile(fixture.decisionsPath, "utf8"), decisions);
+  assert.equal(await readFile(fixture.actionsPath, "utf8"), actionLog);
+});
+
+test("pullActions processes a newer choice after an undo", async (t) => {
+  const fixture = await createPullFixture(
+    t,
+    "pull-decision-actions-rechoice-",
+  );
+  const undone: DecisionAction = {
+    decisionId: "d_synthetic_rechoice",
+    bot: "Synthetic Reviewer",
+    question: "Synthetic re-choice decision?",
+    choice: "no",
+    reply: "",
+    ts: "2026-11-02T15:15:00.000Z",
+    status: "undone",
+    undoneAt: "2026-11-02T15:16:00.000Z",
+  };
+  const chosen: DecisionAction = {
+    ...undone,
+    choice: "yes",
+    ts: "2026-11-02T15:18:00.000Z",
+    status: "chosen",
+    undoneAt: undefined,
+  };
+
+  const first = await pullActions({
+    readRaw: async () => JSON.stringify([undone]),
+    vaultDir: fixture.vaultDir,
+    statePath: fixture.statePath,
+    now: NOW,
+  });
+  assert.equal(first.appended, 1);
+
+  const second = await pullActions({
+    readRaw: async () => JSON.stringify([chosen]),
+    vaultDir: fixture.vaultDir,
+    statePath: fixture.statePath,
+    now: NOW,
+  });
+  assert.equal(second.appended, 1);
+
+  const decisions = await readFile(fixture.decisionsPath, "utf8");
+  requireMatchingLine(decisions, [
+    /\[id:d_synthetic_rechoice\]/,
+    /undo:\s*stop/i,
+    /\[act:d_synthetic_rechoice:undone:2026-11-02T15:16:00\.000Z\]/,
+  ]);
+  requireMatchingLine(decisions, [
+    /\[id:d_synthetic_rechoice\]/,
+    /choice:\s*yes/i,
+    /\[act:d_synthetic_rechoice:chosen:2026-11-02T15:18:00\.000Z\]/,
+  ]);
+
+  const actionLog = await readFile(fixture.actionsPath, "utf8");
+  requireMatchingLine(actionLog, [
+    /\[id:d_synthetic_rechoice\]/,
+    /undo:\s*stop/i,
+    /\[act:d_synthetic_rechoice:undone:2026-11-02T15:16:00\.000Z\]/,
+  ]);
+  requireMatchingLine(actionLog, [
+    /\[id:d_synthetic_rechoice\]/,
+    /chose\s+yes/i,
+    /\[act:d_synthetic_rechoice:chosen:2026-11-02T15:18:00\.000Z\]/,
+  ]);
+});
+
 test("pullActions ignores malformed raw data without throwing", async (t) => {
   const fixture = await createPullFixture(t, "pull-decision-actions-bad-");
 
