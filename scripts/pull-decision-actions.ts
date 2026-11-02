@@ -285,6 +285,23 @@ export async function pullActions(
   return { appended };
 }
 
+export function interpretKvGet(
+  error: { message?: string; stderr?: string } | null,
+  stdout: string,
+): string | null {
+  if (error === null) {
+    const raw = stdout.trim();
+    return raw.length > 0 ? raw : null;
+  }
+
+  const detail = `${error.message ?? ""}\n${error.stderr ?? ""}`;
+  if (/404|not found/i.test(detail)) {
+    return null;
+  }
+
+  throw error;
+}
+
 function readRemoteActions(): Promise<string | null> {
   return new Promise((resolve, reject) => {
     execFile(
@@ -301,12 +318,11 @@ function readRemoteActions(): Promise<string | null> {
       ],
       { encoding: "utf8" },
       (error, stdout) => {
-        if (error) {
-          reject(error);
-          return;
+        try {
+          resolve(interpretKvGet(error, stdout));
+        } catch (interpretError) {
+          reject(interpretError);
         }
-        const raw = stdout.trim();
-        resolve(raw.length > 0 ? raw : null);
       },
     );
   });
