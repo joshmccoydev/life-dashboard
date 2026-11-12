@@ -76,7 +76,7 @@ function emptyData(): DashboardData {
   } as unknown as DashboardData;
 }
 
-function render(data: DashboardData) {
+function render(data: DashboardData, page: "home" | "money" = "home") {
   return renderToString(
     Dashboard({
       initial: data,
@@ -85,6 +85,7 @@ function render(data: DashboardData) {
       demo: false,
       forcedMode: "day",
       paused: true,
+      page,
       useData: () => ({
         data,
         systemHistory: [],
@@ -146,17 +147,23 @@ test("money and health summaries render real values with as-of, mocks stay hidde
     nextSession:
       "Waiting on Josh: pick an eye exam time, or a dentist path. Call 361-986-1117.",
   }) as unknown as DashboardData["health"];
-  const html = render(data);
+  const home = render(data, "home");
+  const html = render(data, "money");
   assert.match(html, /Cash on hand/);
-  assert.match(html, /\$695/);
+  assert.match(html, /\$694\.90/);
   assert.match(html, /Bills due/);
-  assert.match(html, /\$416/);
+  assert.match(html, /\$415\.95/);
   assert.match(html, /4 bills/);
-  assert.match(html, /\$2,600/);
-  assert.match(html, /Alert/);
+  assert.match(html, /Cash covers bills by \$278\.95/);
+  assert.match(html, /Left after bills/);
   assert.match(html, /as of Nov 12, 10:18 AM CT/);
-  assert.match(html, /Waiting on Josh: pick an eye exam time/);
+  assert.match(home, /1 alert/);
+  assert.match(home, /href="\/money"/);
+  assert.doesNotMatch(home, /Cash on hand/);
+  assert.match(home, /Waiting on Josh: pick an eye exam time/);
+  assert.match(home, /as of Nov 12, 10:18 AM CT/);
   assert.doesNotMatch(html, /361-986-1117/);
+  assert.doesNotMatch(home, /361-986-1117/);
   assert.doesNotMatch(html, /— steps/);
   assert.doesNotMatch(html, /0 min exercise/);
   assert.doesNotMatch(html, /4,284/);

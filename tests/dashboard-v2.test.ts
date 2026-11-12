@@ -35,6 +35,12 @@ const PANEL_TITLES = [
   "Systems",
 ] as const;
 
+const HOME_TITLES = [
+  "Bots",
+  "Health",
+  "Systems",
+] as const;
+
 function feed<T>(
   data: T | null,
   overrides: Partial<DataState<T>> = {},
@@ -216,7 +222,10 @@ function fixture(): DashboardData {
   };
 }
 
-function renderDashboard(data: DashboardData): string {
+function renderDashboard(
+  data: DashboardData,
+  page: "home" | "money" = "home",
+): string {
   return renderToString(
     Dashboard({
       initial: data,
@@ -225,6 +234,7 @@ function renderDashboard(data: DashboardData): string {
       demo: false,
       forcedMode: "day",
       paused: true,
+      page,
       useData: () => ({
         data,
         systemHistory: [],
@@ -308,7 +318,7 @@ test("dashboard uses a mobile-first card shell with a sticky clock and weather b
   );
   assert.match(text, /\b10:30\b/);
   assert.match(text, /\b61\b/);
-  assert.match(text, /\bChicago\b/);
+  assert.doesNotMatch(text, /\bChicago\b/, "banned weather city must not appear");
 
   assert.match(html, /role="tablist"/);
   const homeTab =
@@ -322,72 +332,68 @@ test("dashboard uses a mobile-first card shell with a sticky clock and weather b
   assert.match(homeTab, /aria-(?:selected="true"|current="page")/);
   assert.ok(decisionsTab, "the Decisions tab must be rendered");
 
-  for (const title of PANEL_TITLES) {
+  for (const title of HOME_TITLES) {
     assert.match(
       panel(html, title).openingTag,
       /(?:class="[^"]*(?:dashboard-)?card[^"]*"|data-card(?:="true")?|role="(?:region|group)")/i,
       `${title} should be presented as a card`,
     );
   }
+  assert.match(html, />Money</, "Money tab is present");
+  assert.ok(!html.includes('id="money-title"'), "Money panel is not on Home");
 });
 
-test("Bots, Money, and Health expose the Slice 7 summaries", () => {
-  const html = renderDashboard(fixture());
-  const bots = panel(html, "Bots");
-  const money = panel(html, "Money");
-  const health = panel(html, "Health");
+test("Bots, Money, and Health follow the v2 Home / Money split", () => {
+  const data = fixture();
+  data.finance = feed({
+    cashOnHand: 2450,
+    billsDueTotal: 80,
+    billsDueCount: 1,
+    depositTarget: null,
+    status: "ok",
+    bills: [{ name: "Internet", due: "2026-11-05", amount: 80 }],
+  }) as unknown as DashboardData["finance"];
 
-  const waiting = bots.text.indexOf("Waiting on Josh");
-  const lastAction = bots.text.indexOf("Last action: tests passed");
-  assert.ok(waiting >= 0, "the waiting bot needs visible context");
-  assert.ok(lastAction >= 0, "the last bot action must be visible");
-  assert.ok(waiting < lastAction, "bots waiting on Josh sort first");
-  const waitingTags = Array.from(
-    bots.html
-      .slice(0, bots.html.indexOf("Waiting on Josh"))
-      .matchAll(/<[a-z][^>]*>/gi),
-  )
-    .slice(-6)
-    .map(([tag]) => tag)
-    .join(" ");
-  assert.match(
-    waitingTags,
-    /(?:data-waiting="true"|class="[^"]*(?:waiting|highlight|attention)[^"]*")/,
-    "the waiting-on-Josh row must be highlighted",
-  );
+  const home = renderDashboard(data);
+  const moneyPage = renderDashboard(data, "money");
+  const bots = panel(home, "Bots");
+  const health = panel(home, "Health");
+  const money = panel(moneyPage, "Money");
 
-  assert.match(money.text, /\bCash\b/);
+  assert.match(bots.html, /aria-label="Needs Josh"/);
+  assert.match(bots.html, /dashboard-bots-grid/);
+  assert.doesNotMatch(bots.text, /Waiting on Josh/);
+  assert.doesNotMatch(bots.text, /Last action:/);
+
+  assert.match(money.text, /Cash on hand/);
   assert.match(money.text, /2,450/);
-  assert.match(money.text, /\bNext bills?\b/i);
-  assert.match(money.text, /\bInternet\b/);
-  assert.match(money.text, /\bGoal\b/);
-  assert.match(money.text, /\b20%/);
-  assert.match(money.text, /\bAlerts?\b/i);
-  assert.match(money.text, /over budget/i);
+  assert.match(money.text, /Bills due/);
+  assert.match(money.text, /Internet/);
+  assert.ok(!home.includes('id="money-title"'));
+  assert.match(home, /href="\/money"/);
 
   assert.match(health.text, /\bToday\b/);
   assert.match(health.text, /\b(?:This\s+)?week\b/i);
   assert.match(health.text, /\bStreak\b/i);
 });
 
-test("Home preserves the existing schedule, reminders, GitHub, goal, project, and systems panels", () => {
+test("Home leads with Bots, Health, and Systems; Money is its own page", () => {
   const html = renderDashboard(fixture());
-
-  for (const title of PANEL_TITLES) {
+  for (const title of HOME_TITLES) {
     panel(html, title);
   }
-  assert.match(panel(html, "Schedule").text, /Team stand-up/);
-  assert.match(panel(html, "Reminders").text, /Renew passport/);
-  assert.match(panel(html, "GitHub").text, /\b12\b[\s\S]*commits?/i);
-  assert.match(panel(html, "Goals").text, /Ship dashboard/);
-  assert.match(panel(html, "Projects").text, /Mobile rollout/);
+  assert.ok(!html.includes('id="money-title"'), "Money is not a Home panel");
+  assert.match(html, /href="\/money"/);
   assert.match(panel(html, "Systems").text, /Mac mini/);
+  assert.ok(!html.includes('id="schedule-title"'));
+  assert.ok(!html.includes('id="reminders-title"'));
+  assert.ok(!html.includes('id="github-title"'));
 });
 
-test("every panel shows an updated time and stale or empty states stay explicit", () => {
+test("every Home panel shows an updated time and stale or empty states stay explicit", () => {
   const data = fixture();
   const freshHtml = renderDashboard(data);
-  for (const title of PANEL_TITLES) {
+  for (const title of HOME_TITLES) {
     assert.match(
       panel(freshHtml, title).text,
       /\bUpdated\b[\s\S]{0,24}(?:just now|today|\d{1,2}:\d{2}|\d+\s*(?:s|m|h|d))/i,
@@ -397,22 +403,24 @@ test("every panel shows an updated time and stale or empty states stay explicit"
 
   const stale = structuredClone(data);
   for (const state of Object.values(stale)) {
-    state.status = "stale";
-    state.lastSuccess = STALE_SINCE;
+    if (!state || typeof state !== "object" || !("status" in state)) continue;
+    (state as { status: string; lastSuccess: string }).status = "stale";
+    (state as { status: string; lastSuccess: string }).lastSuccess = STALE_SINCE;
   }
   const staleHtml = renderDashboard(stale);
-  for (const title of PANEL_TITLES) {
+  for (const title of HOME_TITLES) {
     assert.match(panel(staleHtml, title).text, /\bstale\b/i);
   }
 
   const empty = structuredClone(data);
   for (const state of Object.values(empty)) {
-    state.data = null;
-    state.status = "error";
-    state.lastSuccess = null;
+    if (!state || typeof state !== "object" || !("status" in state)) continue;
+    (state as { data: unknown; status: string; lastSuccess: string | null }).data = null;
+    (state as { status: string }).status = "error";
+    (state as { lastSuccess: string | null }).lastSuccess = null;
   }
   const emptyHtml = renderDashboard(empty);
-  for (const title of PANEL_TITLES) {
+  for (const title of HOME_TITLES) {
     assert.doesNotMatch(
       emptyHtml,
       new RegExp(`>(?:${title})<`),

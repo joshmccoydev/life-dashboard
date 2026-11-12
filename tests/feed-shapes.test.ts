@@ -163,7 +163,7 @@ function snapshotUpdatedAt(updatedAt: string | null) {
 }
 
 function alertData(systemsData: unknown): DashboardData {
-  const state = <K extends Exclude<keyof DashboardData, "decisions">>(
+  const state = <K extends Exclude<keyof DashboardData, "decisions" | "usage">>(
     data: NonNullable<DashboardData[K]["data"]> | null,
   ): DataState<NonNullable<DashboardData[K]["data"]>> => ({
     loading: false,
@@ -248,6 +248,13 @@ test("hostToSystemState maps the producer host shape and preserves system states
   }
 });
 
+test("hostToSystemState passes through numeric CPU and memory values", () => {
+  const state = hostToSystemState({ uptimeSeconds: 1, loadavg: [0], cpuPercent: 12, memoryPercent: 45, disk: { usedPct: 3 }, crons: 0 });
+  assert.equal(state?.machine.cpuPercent, 12);
+  assert.equal(state?.machine.memoryPercent, 45);
+  assert.equal(state?.machine.diskPercent, 3);
+});
+
 test("botsToAiState maps producer bots and preserves AI telemetry states", () => {
   assert.deepEqual(botsToAiState(PRODUCER_SNAPSHOT.bots.data), {
     providers: [
@@ -257,6 +264,7 @@ test("botsToAiState maps producer bots and preserves AI telemetry states", () =>
         remainingPercent: null,
         detail: "waiting on Josh: review fixture",
         value: "needs Josh",
+        updatedAt: RECENT_ISO,
         requestsToday: null,
         tokensToday: null,
         costToday: null,
@@ -269,6 +277,7 @@ test("botsToAiState maps producer bots and preserves AI telemetry states", () =>
         remainingPercent: null,
         detail: "building fixture",
         value: undefined,
+        updatedAt: RECENT_ISO,
         requestsToday: null,
         tokensToday: null,
         costToday: null,
@@ -389,29 +398,33 @@ test("dashboard SSR renders KV Money, Bots, and Systems data without staleness",
   const { response, payload } = await requestDashboard();
   assert.equal(response.status, 200);
 
-  const html = renderToString(
-    Dashboard({
-      initial: payload.data,
-      renderedAt: payload.serverTime,
-      display,
-      demo: false,
-      forcedMode: "day",
-      paused: true,
-    }),
-  ).replace(/<!-- -->/g, "");
+  const renderPage = (page: "home" | "money") =>
+    renderToString(
+      Dashboard({
+        initial: payload.data,
+        renderedAt: payload.serverTime,
+        display,
+        demo: false,
+        forcedMode: "day",
+        paused: true,
+        page,
+      }),
+    ).replace(/<!-- -->/g, "");
+  const home = renderPage("home");
+  const html = renderPage("money");
 
-  const bots = panelHtml(html, "bots");
+  const bots = panelHtml(home, "bots");
   assert.ok(bots.includes("Synthetic alpha"), bots);
   assert.ok(bots.includes("Synthetic beta"), bots);
   assert.ok(!bots.includes("No bot activity"), bots);
 
   const money = panelHtml(html, "money");
-  assert.ok(money.includes("$1,234"), money);
-  assert.ok(money.includes("$321"), money);
+  assert.ok(money.includes("$1,234.00"), money);
+  assert.ok(money.includes("$321.00"), money);
   assert.ok(money.includes("2 bills"), money);
   assert.ok(!money.includes(">No data<"), money);
 
-  const systems = panelHtml(html, "systems");
+  const systems = panelHtml(home, "systems");
   assert.ok(systems.includes("Box &amp; network"), systems);
   assert.ok(systems.includes("1d uptime"), systems);
   assert.ok(systems.includes("41%"), systems);

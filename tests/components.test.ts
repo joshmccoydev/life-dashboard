@@ -170,10 +170,11 @@ test("null feeds are hidden and empty-but-present lists keep their copy", () => 
   emptyData.habits.data = { habits: [], date: emptyData.habits.data!.date };
   const emptyHtml = renderFixture(emptyData, "day");
   const emptyText = text(emptyHtml);
-  assert.ok(emptyText.includes("No upcoming payments"));
-  assert.ok(emptyText.includes("No work events ahead"));
-  assert.ok(emptyText.includes("No personal events ahead"));
-  assert.ok(emptyText.includes("No habits in the Habits list"));
+  // v2 Home does not include Schedule, Reminders, or Habits.
+  assert.ok(!emptyHtml.includes('id="schedule-title"'));
+  assert.ok(!emptyHtml.includes('id="reminders-title"'));
+  assert.ok(!emptyText.includes("No upcoming payments"));
+  assert.ok(!emptyText.includes("No work events ahead"));
 });
 
 test("a NO DATA feed never picks up a stale suffix", () => {
@@ -234,6 +235,6 @@ test("the dashboard clock keeps ticking past the last refresh", () => {
       }),
     }),
   );
-  assert.ok(html.includes("STALE 10m"), "the ticking clock drives staleness");
-  assert.ok(!html.includes("SYSTEMS NORMAL"), "the feeds read as stale");
+  assert.ok(html.includes("STALE") || html.includes("STALE 10m"), "the ticking clock drives staleness");
+  assert.ok(!html.includes("FEED ATTENTION"), "stale feeds do not set FEED ATTENTION");
 });

@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Bell,
   Bot,
+  Gauge,
   CalendarDays,
   Check,
   Code2,
@@ -24,6 +25,7 @@ import type {
   DecisionsHomeState,
   HealthState,
   Mode,
+  UsageRow,
 } from "@/domains/models";
 import {
   ageLabel,
@@ -34,6 +36,16 @@ import {
   modeAt,
 } from "@/lib/time";
 import { stripPrivate } from "@/lib/privacy";
+import { parseChicagoStamp } from "@/lib/bots-ledger";
+import {
+  OPEN_DECISIONS_HOME_LIMIT,
+} from "@/lib/open-decisions";
+import {
+  usageCostLabel,
+  usageResetLabel,
+  usageTag,
+} from "@/lib/usage";
+import { usageTone } from "@/components/shared/format";
 import { evaluateAlerts, attentionView } from "@/lib/alerts";
 import { useDashboardData } from "@/lib/use-dashboard-data";
 import { normalizeDashboardResponse } from "@/lib/dashboard-response";
@@ -68,16 +80,134 @@ function isLive(state: { source: string; data: unknown } | undefined): boolean {
   return Boolean(state && state.source !== "mock" && state.data !== null);
 }
 
+type MoneyBill = {
+  name: string;
+  due: string | null;
+  amount: number | null;
+};
+
 type FinanceSummary = {
   cashOnHand: number | null;
   billsDueTotal: number | null;
   billsDueCount: number;
   depositTarget: number | null;
   status: "ok" | "alert" | "unknown";
+  bills?: MoneyBill[];
 };
 
 function isFinanceSummary(data: unknown): data is FinanceSummary {
   return isRecord(data) && "cashOnHand" in data;
+}
+
+function moneyIsAlerting(summary: FinanceSummary | null | undefined): boolean {
+  if (!summary) return false;
+  if (summary.status === "alert") return true;
+  return (
+    summary.billsDueTotal != null &&
+    summary.cashOnHand != null &&
+    summary.billsDueTotal >= summary.cashOnHand
+  );
+}
+
+function moneyLeftAfterBills(summary: FinanceSummary): number | null {
+  if (summary.cashOnHand == null || summary.billsDueTotal == null) return null;
+  return Math.round((summary.cashOnHand - summary.billsDueTotal) * 100) / 100;
+}
+
+function moneyAlertReason(
+  summary: FinanceSummary,
+  locale: string,
+  currency: string,
+): string | null {
+  if (!moneyIsAlerting(summary)) return null;
+  const left = moneyLeftAfterBills(summary);
+  if (left === null) return "Money needs attention.";
+  const abs = formatUsd(Math.abs(left), locale, currency);
+  if (left < 0) return `Bills due exceed cash by ${abs}.`;
+  if (left === 0) return "Bills due equal cash.";
+  return `Cash covers bills by ${abs}.`;
+}
+
+function chicagoYmd(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function billIsPastDue(due: string | null, now: Date): boolean {
+  if (!due || !due.trim()) return false;
+  const raw = due.trim().toLowerCase();
+  if (raw === "past due" || raw === "overdue") return true;
+  if (raw === "unknown" || raw === "no date") return false;
+  const ymd = due.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymd) return `${ymd[1]}-${ymd[2]}-${ymd[3]}` < chicagoYmd(now);
+  return false;
+}
+
+function sortBills(bills: MoneyBill[], now: Date): MoneyBill[] {
+  const rank = (bill: MoneyBill): [number, string] => {
+    if (billIsPastDue(bill.due, now)) {
+      const dated = (bill.due ?? "").match(/^\d{4}-\d{2}-\d{2}$/);
+      return [0, dated ? (bill.due as string) : "0000-00-00"];
+    }
+    const dated = (bill.due ?? "").match(/^\d{4}-\d{2}-\d{2}$/);
+    if (dated) return [1, bill.due as string];
+    return [2, "9999-99-99"];
+  };
+  return [...bills].sort((left, right) => {
+    const a = rank(left);
+    const b = rank(right);
+    return a[0] - b[0] || a[1].localeCompare(b[1]);
+  });
+}
+
+function moneyAlertCount(data: DashboardData): number {
+  const summary = isFinanceSummary(data.finance?.data)
+    ? data.finance.data
+    : null;
+  return moneyIsAlerting(summary) ? 1 : 0;
+}
+
+function formatUsd(
+  value: number,
+  locale: string,
+  currency: string,
+): string {
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatBillDue(due: string | null): string {
+  if (!due || due.trim() === "") return "—";
+  const raw = due.trim();
+  const lower = raw.toLowerCase();
+  if (lower === "unknown") return "No date";
+  if (lower === "past due") return "Past due";
+  const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymd) {
+    const date = new Date(
+      Date.UTC(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]), 12),
+    );
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    }).format(date);
+  }
+  const parsed = Date.parse(raw);
+  if (Number.isNaN(parsed)) return raw;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "America/Chicago",
+  }).format(new Date(parsed));
 }
 
 function isLegacyFinance(data: unknown): boolean {
@@ -184,7 +314,7 @@ function DashboardCard({
           {empty ? (
             <strong className="dashboard-panel-status">No data</strong>
           ) : stale ? (
-            <strong className="dashboard-panel-status">Stale</strong>
+            <span className="dash-tag stale">STALE</span>
           ) : null}
         </div>
       </header>
@@ -193,18 +323,78 @@ function DashboardCard({
   );
 }
 
+
+const BOTS_HOME_LIMIT = 15;
+
+function chicagoParts(date: Date) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).formatToParts(date);
+}
+
+function part(
+  parts: Intl.DateTimeFormatPart[],
+  type: Intl.DateTimeFormatPartTypes,
+) {
+  return parts.find((entry) => entry.type === type)?.value ?? "";
+}
+
+function sameChicagoDay(left: Date, right: Date) {
+  const a = chicagoParts(left);
+  const b = chicagoParts(right);
+  return (
+    part(a, "year") === part(b, "year") &&
+    part(a, "month") === part(b, "month") &&
+    part(a, "day") === part(b, "day")
+  );
+}
+
+function lastRunLabel(value: string | null | undefined, now: Date) {
+  if (!value) return "—";
+  const iso = parseChicagoStamp(value) ?? value;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  const parts = chicagoParts(date);
+  const time = `${part(parts, "hour")}:${part(parts, "minute")} ${part(parts, "dayPeriod")}`;
+  if (sameChicagoDay(date, now)) return time;
+  const days = Math.abs(now.getTime() - date.getTime()) / 86_400_000;
+  if (days < 6) return `${part(parts, "weekday")} ${time}`;
+  return `${part(parts, "month")} ${part(parts, "day")}`;
+}
+
+function botStatusBadge(provider: {
+  status: string;
+  detail?: string;
+  value?: string;
+}) {
+  const waiting =
+    provider.status === "waiting" ||
+    provider.value?.toLowerCase() === "needs josh";
+  if (waiting) return { label: "Needs Josh", kind: "ask" as const };
+  if (provider.status === "blocked") {
+    return { label: "Blocked", kind: "blocked" as const };
+  }
+  if (provider.status === "running") {
+    return { label: "Working", kind: "working" as const };
+  }
+  return { label: "Idle", kind: "idle" as const };
+}
+
 function BotsPanel({ data, now }: { data: DashboardData; now: Date }) {
+  const rank = (kind: string) =>
+    ({ ask: 0, blocked: 1, working: 2, idle: 3 }[kind] ?? 4);
   const providers = [...(data.ai.data?.providers ?? [])].sort((left, right) => {
-    const leftStatus = left.status as string;
-    const rightStatus = right.status as string;
-    const leftWaiting =
-      leftStatus === "waiting" ||
-      left.detail?.toLowerCase().includes("waiting on josh");
-    const rightWaiting =
-      rightStatus === "waiting" ||
-      right.detail?.toLowerCase().includes("waiting on josh");
-    return Number(rightWaiting) - Number(leftWaiting);
+    return rank(botStatusBadge(left).kind) - rank(botStatusBadge(right).kind);
   });
+  const visible = providers.slice(0, BOTS_HOME_LIMIT);
+  const extra = providers.length - visible.length;
 
   return (
     <DashboardCard
@@ -216,33 +406,36 @@ function BotsPanel({ data, now }: { data: DashboardData; now: Date }) {
       className="dashboard-card-bots"
     >
       {data.ai.data === null ? (
-        <div className="domain-empty">No data</div>
-      ) : providers.length ? (
-        <div className="dashboard-bot-list">
-          {providers.map((provider) => {
-            const status = provider.status as string;
-            const waiting =
-              status === "waiting" ||
-              provider.detail?.toLowerCase().includes("waiting on josh");
-            return (
-              <div
-                className={`dashboard-bot-row${waiting ? " waiting highlight attention" : ""}`}
-                data-waiting={waiting ? "true" : undefined}
-                key={provider.name}
-              >
-                <div>
-                  <strong>{stripPrivate(provider.name)}</strong>
-                  <p>{stripPrivate(provider.detail || "No recent action")}</p>
-                </div>
-                <span>{stripPrivate(String(provider.value || provider.status))}</span>
-              </div>
-            );
-          })}
-        </div>
+        <div className="domain-empty">No bot status yet.</div>
+      ) : visible.length ? (
+        <>
+          <ul className="dashboard-bots-grid">
+            {visible.map((provider) => {
+              const badge = botStatusBadge(provider);
+              return (
+                <li key={provider.name} className="dashboard-bot-cell">
+                  <span className="name">{stripPrivate(provider.name)}</span>
+                  <span className="run">
+                    {lastRunLabel(provider.updatedAt, now)}
+                  </span>
+                  <span
+                    className={`dashboard-bot-dot ${badge.kind}`}
+                    title={badge.label}
+                    aria-label={badge.label}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+          {extra > 0 ? (
+            <p className="dashboard-bots-more">
+              {extra} more
+            </p>
+          ) : null}
+        </>
       ) : (
-        <div className="domain-empty">No bot activity</div>
+        <div className="domain-empty">No bot status yet.</div>
       )}
-      <Feed state={data.ai} now={now} />
     </DashboardCard>
   );
 }
@@ -256,36 +449,19 @@ function MoneyPanel({
   display: DisplayConfig;
   now: Date;
 }) {
-  type FinanceSummary = {
-    cashOnHand: number | null;
-    billsDueTotal: number | null;
-    billsDueCount: number;
-    depositTarget: number | null;
-    status: "ok" | "alert" | "unknown";
-  };
-
-  const finance = data.finance.data;
-  const financeSummary =
-    finance !== null &&
-    typeof finance === "object" &&
-    "cashOnHand" in finance
-      ? (finance as unknown as FinanceSummary)
-      : null;
-  const money = new Intl.NumberFormat(display.locale, {
-    style: "currency",
-    currency: display.currency,
-    maximumFractionDigits: 0,
-  });
-  const bills = [...(finance?.bills ?? [])].sort(
-    (left, right) => Date.parse(left.due) - Date.parse(right.due),
-  );
-  const goal =
-    finance && finance.emergencyTarget > 0
-      ? Math.round((finance.emergencyFund / finance.emergencyTarget) * 100)
-      : 0;
-  const overBudget = finance
-    ? finance.spending > finance.spendingBudget
-    : false;
+  const finance: unknown = data.finance.data;
+  const financeSummary = isFinanceSummary(finance) ? finance : null;
+  const alerting = moneyIsAlerting(financeSummary);
+  const reason = financeSummary
+    ? moneyAlertReason(financeSummary, display.locale, display.currency)
+    : null;
+  const leftAfter = financeSummary ? moneyLeftAfterBills(financeSummary) : null;
+  const bills: MoneyBill[] = financeSummary
+    ? sortBills(financeSummary.bills ?? [], now)
+    : [];
+  const empty =
+    finance === null ||
+    (!financeSummary && !isLegacyFinance(finance));
 
   return (
     <DashboardCard
@@ -294,86 +470,98 @@ function MoneyPanel({
       icon={DollarSign}
       source={data.finance}
       now={now}
-      className="dashboard-card-money"
+      className={`dashboard-card-money${alerting ? " alert" : ""}`}
     >
-      {finance === null ? (
-        <div className="domain-empty">No data</div>
+      {empty || (!financeSummary && !isLegacyFinance(finance)) ? (
+        <div className="domain-empty">No money data yet.</div>
       ) : financeSummary ? (
-        <div className="dashboard-money-grid">
-          <div>
-            <span>Cash on hand</span>
-            <strong>
-              {financeSummary.cashOnHand === null
-                ? "—"
-                : money.format(financeSummary.cashOnHand)}
-            </strong>
+        <>
+          <div className="dashboard-money-row">
+            <div>
+              <span>Cash on hand</span>
+              <strong>
+                {financeSummary.cashOnHand === null
+                  ? "—"
+                  : formatUsd(
+                      financeSummary.cashOnHand,
+                      display.locale,
+                      display.currency,
+                    )}
+              </strong>
+            </div>
+            <div>
+              <span>Bills due</span>
+              <strong>
+                {financeSummary.billsDueTotal === null
+                  ? "—"
+                  : formatUsd(
+                      financeSummary.billsDueTotal,
+                      display.locale,
+                      display.currency,
+                    )}
+              </strong>
+              <p>
+                {financeSummary.billsDueCount}{" "}
+                {financeSummary.billsDueCount === 1 ? "bill" : "bills"}
+              </p>
+            </div>
+            {leftAfter !== null ? (
+              <div>
+                <span>Left after bills</span>
+                <strong className={leftAfter < 0 ? "negative" : undefined}>
+                  {formatUsd(leftAfter, display.locale, display.currency)}
+                </strong>
+              </div>
+            ) : null}
           </div>
-          <div>
-            <span>Bills due</span>
-            <strong>
-              {financeSummary.billsDueTotal === null
-                ? "—"
-                : money.format(financeSummary.billsDueTotal)}
-            </strong>
-            <p>{financeSummary.billsDueCount} bills</p>
-          </div>
-          <div>
-            <span>Deposit target</span>
-            <strong>
-              {financeSummary.depositTarget === null
-                ? "—"
-                : money.format(financeSummary.depositTarget)}
-            </strong>
-          </div>
-          <div>
-            <span>Status</span>
-            <strong
-              className={
-                financeSummary.status === "ok"
-                  ? "metric-good"
-                  : financeSummary.status === "alert"
-                    ? "metric-critical"
-                    : undefined
-              }
-            >
-              {financeSummary.status === "ok"
-                ? "On track"
-                : financeSummary.status === "alert"
-                  ? "Alert"
-                  : "Unknown"}
-            </strong>
-          </div>
-        </div>
+          {alerting && reason ? (
+            <p className="alert-reason">{reason}</p>
+          ) : null}
+          {bills.length > 0 ? (
+            <table className="dashboard-bills">
+              <thead>
+                <tr>
+                  <th>Bill</th>
+                  <th className="due">Due</th>
+                  <th className="amt">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bills.map((bill, index) => {
+                  const pastDue = billIsPastDue(bill.due, now);
+                  const dueLabel = formatBillDue(bill.due);
+                  const noDate = dueLabel === "No date";
+                  const noAmount = bill.amount === null;
+                  return (
+                    <tr
+                      key={`${bill.name}-${bill.due ?? "none"}-${index}`}
+                      className={pastDue ? "past-due" : undefined}
+                    >
+                      <td className="name">{bill.name}</td>
+                      <td className={`due${noDate ? " muted" : ""}`}>
+                        {pastDue ? (
+                          <i className="due-dot" aria-hidden="true" />
+                        ) : null}
+                        {dueLabel}
+                      </td>
+                      <td className={`amt${noAmount ? " muted" : ""}`}>
+                        {noAmount
+                          ? "Amount ?"
+                          : formatUsd(
+                              bill.amount as number,
+                              display.locale,
+                              display.currency,
+                            )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : null}
+        </>
       ) : (
-        <div className="dashboard-money-grid">
-          <div>
-            <span>Cash</span>
-            <strong>{money.format(finance.checking)}</strong>
-          </div>
-          <div>
-            <span>Next bills</span>
-            {bills.length ? (
-              bills.slice(0, 2).map((bill) => (
-                <p key={`${bill.title}-${bill.due}`}>
-                  {bill.title} <strong>{money.format(bill.amount)}</strong>
-                </p>
-              ))
-            ) : (
-              <p>No upcoming payments</p>
-            )}
-          </div>
-          <div>
-            <span>Goal</span>
-            <strong>{goal}%</strong>
-            <p>Emergency fund</p>
-          </div>
-          <div>
-            <span>Alerts</span>
-            <strong className={overBudget ? "metric-critical" : "metric-good"}>
-              {overBudget ? "Over budget" : "On track"}
-            </strong>
-          </div>
-        </div>
+        <div className="domain-empty">No money data yet.</div>
       )}
     </DashboardCard>
   );
@@ -531,7 +719,7 @@ function DecisionsPanel({
     | { data: DecisionsHomeState | null }
     | undefined;
   const payload = entry?.data;
-  const cards = (payload?.cards ?? []).slice(0, 8);
+  const cards = (payload?.cards ?? []).slice(0, OPEN_DECISIONS_HOME_LIMIT);
   const total = payload?.count ?? cards.length;
   const source = data.decisions!;
 
@@ -553,22 +741,106 @@ function DecisionsPanel({
             className={`dashboard-decision-row${card.blocking ? " waiting highlight attention" : ""}`}
             key={card.id ?? `${card.bot}-${index}`}
           >
-            <div>
-              <strong>{stripPrivate(card.bot)}</strong>
-              <p>{stripPrivate(card.question)}</p>
-            </div>
-            {card.blocking ? <span>blocking</span> : null}
+            <span className="dashboard-decision-bot">
+              {stripPrivate(card.bot)}
+            </span>
+            <p className="dashboard-decision-q">
+              {stripPrivate(card.question)}
+            </p>
+            {card.blocking ? (
+              <span className="dashboard-decision-block">blocking</span>
+            ) : null}
           </div>
         ))}
       </div>
       <a className="dashboard-decisions-link" href="/decisions">
         <span>
-          {total > cards.length
-            ? `Open all ${total} in the inbox`
-            : "Open the decisions inbox"}
+          {`See all ${total} open ${total === 1 ? "item" : "items"}`}
         </span>
         <ArrowRight aria-hidden="true" />
       </a>
+    </DashboardCard>
+  );
+}
+
+
+function UsagePanel({ data, now }: { data: DashboardData; now: Date }) {
+  const source = data.usage;
+  const providers = source?.data?.providers ?? [];
+  if (!source) return null;
+
+  const planLine = (row: UsageRow) => {
+    const bits: string[] = [];
+    if (row.plan) bits.push(row.plan);
+    const cost = usageCostLabel(row.monthly_cost_usd);
+    if (cost) bits.push(cost);
+    const reset = usageResetLabel(row.resets_at, now);
+    if (reset) bits.push(reset);
+    return bits.join(" · ") || "—";
+  };
+
+  const asOfLine = (row: UsageRow) => {
+    const asOf = row.as_of ? asOfLabel(row.as_of) : "—";
+    if (!row.source) return asOf;
+    return `${asOf} · ${row.source}`;
+  };
+
+  const pctLabel = (row: UsageRow) => {
+    if (row.pct_used !== null) return `${row.pct_used}%`;
+    const tag = usageTag(row);
+    if (tag === "manual" || row.source === "manual") return "manual";
+    return "—";
+  };
+
+  return (
+    <DashboardCard
+      id="usage"
+      title="Usage"
+      icon={Gauge}
+      source={source}
+      now={now}
+      className="dashboard-card-usage"
+    >
+      {providers.length ? (
+        <div className="dashboard-usage-grid">
+          {providers.map((row) => {
+            const tag = usageTag(row);
+            const pct = row.pct_used;
+            const high = pct !== null && pct >= 70;
+            return (
+              <article className="dashboard-usage-card" key={row.id}>
+                <header>
+                  <h3>{row.name}</h3>
+                  {tag ? (
+                    <span className={`dash-tag ${tag}`}>{tag}</span>
+                  ) : null}
+                </header>
+                <div
+                  className={`dashboard-usage-bar${high ? " high" : ""}`}
+                  aria-hidden="true"
+                >
+                  <i
+                    style={{
+                      width: pct === null ? "0%" : `${Math.max(0, Math.min(100, pct))}%`,
+                    }}
+                  />
+                </div>
+                <div
+                  className={`dashboard-usage-pct ${pct === null ? "empty" : usageTone(pct)}`}
+                >
+                  {pctLabel(row)}
+                </div>
+                <p className="dashboard-usage-plan">{planLine(row)}</p>
+                <p className="dashboard-usage-asof">{asOfLine(row)}</p>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="domain-empty">
+          No usage figures yet. Add a manual entry.
+        </div>
+      )}
     </DashboardCard>
   );
 }
@@ -695,6 +967,10 @@ function DashboardStyles() {
       }
 
       .dashboard-tab {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
         padding: var(--space-2) var(--space-3);
         border: 1px solid transparent;
         border-radius: 0.4rem;
@@ -703,6 +979,7 @@ function DashboardStyles() {
         cursor: pointer;
         font: inherit;
         font-size: var(--type-detail);
+        font-weight: 600;
         text-decoration: none;
       }
 
@@ -890,26 +1167,57 @@ function DashboardStyles() {
       .dashboard-decisions-list {
         display: flex;
         flex-direction: column;
-        gap: var(--space-2);
+        gap: 0;
         min-width: 0;
       }
 
       .dashboard-decision-row {
         display: flex;
-        justify-content: space-between;
-        gap: var(--space-3);
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
         min-width: 0;
+        min-height: 44px;
+        padding: 6px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
       }
 
-      .dashboard-decision-row div {
-        min-width: 0;
+      .dashboard-decision-row:last-child {
+        border-bottom: 0;
       }
 
-      .dashboard-decision-row p {
-        margin-top: var(--space-1);
-        color: var(--color-text-secondary);
-        font-size: var(--type-detail);
+      .dashboard-decision-bot {
+        display: inline-flex;
+        align-self: flex-start;
+        max-width: 100%;
+        padding: 1px 8px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--color-text-muted);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        line-height: 18px;
+        white-space: nowrap;
+      }
+
+      .dashboard-decision-q {
+        margin: 0;
+        flex: 1 1 12rem;
+        color: var(--color-text);
+        font-size: 16px;
+        font-weight: 500;
+        line-height: 1.35;
         overflow-wrap: anywhere;
+      }
+
+      .dashboard-decision-block {
+        color: var(--color-state-critical);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
       }
 
       .dashboard-decisions-link {
@@ -926,17 +1234,605 @@ function DashboardStyles() {
         min-height: 44px;
       }
 
-      @media (min-width: 640px) {
-        .dashboard-home {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
 
+      .dashboard-bots-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .dashboard-bots-table th {
+        text-align: left;
+        color: var(--color-text-muted);
+        font-size: var(--type-micro, 12px);
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 0 8px 8px;
+      }
+      .dashboard-bots-table td {
+        padding: 0 8px;
+        height: 48px;
+        border-top: 1px solid var(--color-border);
+        font-size: 15px;
+        vertical-align: middle;
+      }
+      .dashboard-bots-table td.name {
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .dashboard-bots-table td.run {
+        color: var(--color-text-secondary);
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+      }
+      .dashboard-bots-table td.status {
+        width: 128px;
+      }
+      .dashboard-bots-table tbody tr:hover {
+        background: var(--color-surface-raised);
+      }
+      .dashboard-bots-more {
+        display: flex;
+        align-items: center;
+        min-height: 44px;
+        margin: 8px 0 0;
+        color: var(--color-accent);
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .dashboard-bots-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        column-gap: 16px;
+        row-gap: 0;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .dashboard-bot-cell {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        align-items: center;
+        gap: 8px;
+        min-height: 28px;
+        padding: 2px 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        font-size: 13px;
+      }
+      .dashboard-bot-cell .name {
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .dashboard-bot-cell .run {
+        color: var(--color-text-secondary);
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+        font-size: 12px;
+      }
+      .dashboard-bot-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .dashboard-bot-dot.ask { background: var(--color-state-critical); }
+      .dashboard-bot-dot.working { background: var(--color-state-good); }
+      .dashboard-bot-dot.idle { background: var(--color-text-muted); }
+      .dashboard-bot-dot.blocked { background: var(--color-state-caution); }
+
+      .dash-tag {
+        display: inline-flex;
+        align-items: center;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 4px;
+        border: 1px solid var(--color-border-strong);
+        color: var(--color-text-muted);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+      .dash-tag.manual {
+        border-color: var(--color-text-muted);
+      }
+      .dash-tag.stale {
+        border-color: var(--color-state-caution);
+        color: var(--color-state-caution);
+        background: rgba(224, 183, 118, 0.12);
+      }
+      .dash-tag.alert {
+        border-color: var(--color-state-critical);
+        color: var(--color-state-critical);
+        background: rgba(223, 137, 132, 0.12);
+      }
+      .dash-tag.ok {
+        border-color: var(--color-state-good);
+        color: var(--color-state-good);
+      }
+      .dash-tag.idle,
+      .dash-tag.paused {
+        border-color: var(--color-border-strong);
+      }
+
+      .dashboard-usage-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .dashboard-usage-card {
+        background: var(--color-surface-raised);
+        border: 1px solid var(--color-border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        min-width: 0;
+      }
+      .dashboard-usage-card header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .dashboard-usage-card h3 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .dashboard-usage-bar {
+        height: 8px;
+        border-radius: 99px;
+        background: var(--color-surface-emphasis);
+        overflow: hidden;
+      }
+      .dashboard-usage-bar > i {
+        display: block;
+        height: 100%;
+        background: var(--color-accent);
+        border-radius: 99px;
+      }
+      .dashboard-usage-bar.high > i {
+        background: var(--color-state-caution);
+      }
+      .dashboard-usage-pct {
+        margin-top: 8px;
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        font-variant-numeric: tabular-nums;
+      }
+      .dashboard-usage-card p,
+      .dashboard-usage-plan,
+      .dashboard-usage-asof {
+        margin: 4px 0 0;
+        color: var(--color-text-muted);
+        font-size: 12px;
+        line-height: 1.35;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .dashboard-usage-pct.empty {
+        color: var(--color-text-muted);
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: lowercase;
+      }
+
+      .dashboard-decision-q {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      a:focus-visible,
+      button:focus-visible,
+      .dashboard-tab:focus-visible,
+      .dashboard-decisions-link:focus-visible,
+      .alert-chip:focus-visible {
+        outline: 2px solid #8fc9be;
+        outline-offset: 2px;
+      }
+
+      .dashboard-card {
+        height: fit-content;
+      }
+      .dashboard-home {
+        align-items: start;
+      }
+      .dashboard-card-money.alert {
+        border-color: var(--color-state-critical);
+        background: linear-gradient(
+          180deg,
+          rgba(223, 137, 132, 0.12),
+          var(--color-surface) 48px
+        );
+        box-shadow: inset 4px 0 0 var(--color-state-critical);
+        transition: box-shadow 160ms ease, border-color 160ms ease;
+      }
+      .alert-reason {
+        margin: 12px 0 0;
+        color: var(--color-state-critical);
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .dashboard-money-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 12px;
+      }
+      .dashboard-money-row strong.negative {
+        color: var(--color-state-critical);
+      }
+      .dashboard-money-row span {
+        display: block;
+        color: var(--color-text-muted);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .dashboard-money-row strong {
+        display: block;
+        margin-top: 4px;
+        font-size: var(--type-tier-2, 36px);
+        font-weight: 600;
+        line-height: 1.1;
+        font-variant-numeric: tabular-nums;
+      }
+      .dashboard-money-row p {
+        margin: 4px 0 0;
+        color: var(--color-text-secondary);
+        font-size: 12px;
+      }
+      .dashboard-bills {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 16px;
+      }
+      .dashboard-bills th {
+        text-align: left;
+        color: var(--color-text-muted);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 0 8px 8px;
+      }
+      .dashboard-bills td {
+        padding: 0 8px;
+        height: 48px;
+        border-top: 1px solid var(--color-border);
+        font-size: 15px;
+        vertical-align: middle;
+      }
+      .dashboard-bills td.name {
+        font-weight: 600;
+      }
+      .dashboard-bills th.due,
+      .dashboard-bills td.due {
+        text-align: left;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        color: var(--color-text-secondary);
+      }
+      .dashboard-bills th.amt,
+      .dashboard-bills td.amt {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        font-weight: 600;
+        color: var(--color-text);
+      }
+      .dashboard-bills tr.past-due td.due {
+        color: var(--color-state-critical);
+        font-weight: 600;
+      }
+      .dashboard-bills .due-dot {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--color-state-critical);
+        margin-right: 6px;
+        vertical-align: middle;
+      }
+      .dashboard-bills td.due.muted,
+      .dashboard-bills td.amt.muted {
+        color: var(--color-text-muted);
+        font-weight: 400;
+      }
+      .mode-label[hidden],
+      .mode-label {
+        display: none !important;
+      }
+      .alert-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 8px;
+        min-height: 44px;
+        padding: 0 12px;
+        border-radius: 999px;
+        background: rgba(223, 137, 132, 0.12);
+        border: 1px solid var(--color-state-critical);
+        color: var(--color-state-critical);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        text-decoration: none;
+      }
+      .dashboard-money-page {
+        grid-template-columns: 1fr;
+      }
+      main.dashboard:has(.dashboard-money-page) {
+        align-content: start;
+        grid-template-rows: auto auto auto auto;
+        height: auto;
+        min-height: 0;
+      }
+      .dashboard-money-page .dashboard-card-money {
+        grid-column: 1 / -1;
+        height: fit-content;
+      }
+
+      /* iPad type scale and 8px grid. Do not use TV vw/svh clamps here. */
+      @media (max-width: 1024px) {
+        main.dashboard {
+          --type-tier-1: 56px;
+          --type-tier-2: 36px;
+          --type-tier-3: 20px;
+          --type-detail: 15px;
+          --type-micro: 12px;
+          --space-1: 4px;
+          --space-2: 8px;
+          --space-3: 12px;
+          --space-4: 16px;
+          --space-5: 24px;
+          --space-6: 32px;
+          max-width: 1024px;
+          padding: 24px;
+          gap: 16px;
+          /* Tabs are a fourth row. Do not let the TV 3-row 1fr stretch them.
+             align-content:start keeps auto rows from growing when the page
+             (Money) is shorter than 100svh. */
+          grid-template-rows: auto auto auto auto;
+          height: auto;
+          min-height: 0;
+          align-content: start;
+          overflow: visible;
+        }
+        .dashboard-tabs {
+          display: flex;
+          align-items: center;
+          align-self: start;
+          height: fit-content;
+        }
+        .dashboard-tab {
+          align-self: center;
+          height: 44px;
+        }
+        /* Identity (wordmark + money alert chip) is hidden below 1024 in
+           globals.css. Keep the chip visible on iPad 820 and phone. */
+        .identity {
+          display: block;
+          min-width: 0;
+        }
+        .dashboard-home {
+          gap: 16px;
+          padding: 0;
+        }
+        .dashboard-card {
+          border-radius: 8px;
+        }
+        .dashboard-panel-header,
+        .dashboard-panel-body {
+          padding: 16px;
+        }
+        .dashboard-panel-heading h2 {
+          font-size: 20px;
+          line-height: 1.2;
+          font-weight: 600;
+          white-space: nowrap;
+        }
+        .clock {
+          font-size: 56px;
+          font-weight: 600;
+          line-height: 1;
+        }
+        .clock small {
+          font-size: 18px;
+          font-weight: 500;
+          color: var(--color-accent);
+        }
+        .date {
+          font-size: 14px;
+          font-weight: 600;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--color-accent);
+        }
+        .dashboard-tab,
+        .dashboard-decisions-link,
+        .dashboard-bots-more {
+          min-height: 44px;
+        }
+      }
+      @media (max-width: 900px) {
+        main.dashboard {
+          --type-tier-1: 48px;
+          --type-tier-2: 32px;
+          padding: 16px;
+        }
+        .clock {
+          font-size: 48px;
+        }
+        .dashboard-usage-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+        .dashboard-home {
+          grid-template-columns: 1fr;
+        }
+        .dashboard-card-decisions,
+        .dashboard-card-usage,
         .dashboard-card-bots,
         .dashboard-card-health,
         .dashboard-card-systems,
-        .dashboard-card-money,
-        .dashboard-card-decisions {
-          grid-column: span 2;
+        .dashboard-card-money {
+          grid-column: 1 / -1;
+          height: fit-content;
+        }
+        .dashboard-money-row {
+          grid-template-columns: 1fr;
+        }
+        .dashboard-bots-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+        /* One-row header: clock+date left; weather, alert chip, brand right. */
+        .header,
+        .header.dashboard-topbar {
+          display: flex;
+          flex-direction: row;
+          flex-wrap: nowrap;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
+        .header-right {
+          display: flex;
+          flex-direction: row;
+          flex-wrap: nowrap;
+          justify-content: flex-end;
+          align-items: center;
+          gap: 10px;
+          width: auto;
+          flex: 1 1 auto;
+          min-width: 0;
+        }
+        .weather {
+          display: flex;
+          width: auto;
+          justify-content: flex-start;
+          align-items: center;
+          padding-right: 10px;
+          border-right: 1px solid var(--color-border);
+          flex: 0 1 auto;
+          min-width: 0;
+        }
+        .weather-feed {
+          display: none;
+        }
+        .weather-main p {
+          display: none;
+        }
+        .weather-main {
+          gap: 8px;
+        }
+        .weather-main > svg {
+          width: 28px;
+          height: 28px;
+        }
+        .weather-main > span {
+          font-size: 28px;
+        }
+        .weather-main strong {
+          font-size: 12px;
+        }
+        .identity {
+          display: flex;
+          flex-direction: row;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+          flex: 0 0 auto;
+        }
+        .identity .wordmark {
+          order: 2;
+          font-size: 16px;
+        }
+        .identity .alert-chip,
+        .identity .global-status {
+          order: 1;
+          margin-top: 0;
+          min-height: 36px;
+          height: 36px;
+          padding: 0 10px;
+          font-size: 11px;
+        }
+        .identity .global-status {
+          min-height: 0;
+          height: auto;
+        }
+        .clock {
+          font-size: 48px;
+        }
+        .decision-q, .dashboard-decision-q {
+          font-size: 16px;
+        }
+      }
+      @media (max-width: 480px) {
+        main.dashboard {
+          --type-tier-1: 40px;
+          --type-tier-2: 28px;
+          --type-tier-3: 18px;
+          --type-detail: 14px;
+          padding: 16px;
+        }
+        .clock {
+          font-size: 40px;
+        }
+        .dashboard-panel-heading h2 {
+          font-size: 18px;
+          white-space: nowrap;
+        }
+        .dashboard-usage-grid,
+        .dashboard-bots-table td.run {
+          /* keep last-run on phone unless it overflows; hide only run column at 360 per mock */
+        }
+        .dashboard-usage-grid {
+          grid-template-columns: 1fr;
+        }
+        .dashboard-bots-table td.run {
+          display: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .dashboard-card,
+        .dashboard-card-money.alert,
+        .dash-tag,
+        .dashboard-usage-bar > i,
+        .alert-chip {
+          transition: none !important;
+          animation: none !important;
+        }
+      }
+
+      @media (min-width: 901px) {
+        .dashboard-home {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          align-items: start;
+        }
+
+        .dashboard-card-bots,
+        .dashboard-card-decisions,
+        .dashboard-card-usage,
+        .dashboard-card-money {
+          grid-column: 1 / -1;
+          height: fit-content;
+        }
+
+        .dashboard-card-health,
+        .dashboard-card-systems {
+          grid-column: span 1;
+          height: fit-content;
+          align-self: start;
         }
 
         .dashboard-schedule-grid {
@@ -963,7 +1859,8 @@ function DashboardStyles() {
           grid-column: span 1;
         }
 
-        .dashboard-card-decisions {
+        .dashboard-card-decisions,
+        .dashboard-card-usage {
           grid-column: span 2;
         }
       }
@@ -978,6 +1875,7 @@ function LiveDashboard({
   demo,
   forcedMode,
   paused,
+  page = "home",
   useData = useDashboardData,
 }: {
   initial: DashboardData;
@@ -986,6 +1884,7 @@ function LiveDashboard({
   demo: boolean;
   forcedMode?: string;
   paused: boolean;
+  page?: "home" | "money";
   /**
    * The live data hook. Overridable so the clock derivation below can be
    * exercised without a DOM renderer; production always uses the real hook.
@@ -1025,8 +1924,13 @@ function LiveDashboard({
   const attention = attentionView(alerts, mode, rotation);
   const critical = alerts.some((a) => a.level === "critical");
   const visibleFeeds = Object.entries(data)
-    .filter(([domain]) => domain !== "health" && domain !== "finance")
-    .map(([, state]) => state);
+    .filter(([domain, state]) => {
+      if (domain === "health" || domain === "finance" || domain === "decisions" || domain === "usage") {
+        return false;
+      }
+      return Boolean(state && typeof state === "object" && "source" in state);
+    })
+    .map(([, state]) => state as { source: string; data: unknown; status: string; lastSuccess: string | null; refreshMs: number });
   const live = visibleFeeds.filter(
     (state) => state.source === "real" && state.data !== null,
   ).length;
@@ -1040,11 +1944,10 @@ function LiveDashboard({
     (d) =>
       d.status !== "ready" || isStale(d.lastSuccess, clockNow, d.refreshMs),
   );
-  const status = critical
+  const alertCount = moneyAlertCount(data);
+  const status = critical && alertCount === 0
     ? "SYSTEM ATTENTION"
-    : connectionError || sourceProblems
-      ? "FEED ATTENTION"
-      : "SYSTEMS NORMAL";
+    : "SYSTEMS NORMAL";
   return (
     <main
       className={`dashboard mode-${mode} ${display.pixelShift ? `pixel-shift-${rotation % 4}` : ""}`}
@@ -1061,12 +1964,18 @@ function LiveDashboard({
               </span>
               lifedash
             </div>
-            <div
-              className={`global-status ${critical ? "critical" : sourceProblems || connectionError ? "caution" : ""}`}
-            >
-              <i />
-              {status}
-            </div>
+            {alertCount > 0 ? (
+              <a className="alert-chip" href="/money">
+                {alertCount === 1 ? "1 alert" : `${alertCount} alerts`}
+              </a>
+            ) : (
+              <div
+                className={`global-status ${critical ? "critical" : ""}`}
+              >
+                <i />
+                {status}
+              </div>
+            )}
             <div className="mode-label">
               {mode.toUpperCase()} MODE <span>/</span>{" "}
               {
@@ -1086,89 +1995,62 @@ function LiveDashboard({
         role="tablist"
         aria-label="Dashboard views"
       >
-        <button
-          type="button"
+        <a
           className="dashboard-tab"
+          href="/"
           role="tab"
-          aria-selected="true"
+          aria-current={page === "home" ? "page" : undefined}
+          aria-selected={page === "home"}
         >
           Home
-        </button>
+        </a>
         <a className="dashboard-tab" href="/decisions" role="tab">
           Decisions
         </a>
+        <a
+          className="dashboard-tab"
+          href="/money"
+          role="tab"
+          aria-current={page === "money" ? "page" : undefined}
+          aria-selected={page === "money"}
+        >
+          Money
+        </a>
       </nav>
       <SystemHistoryContext.Provider value={systemHistory}>
+        {page === "money" ? (
+          <div
+            className="domain-columns dashboard-home dashboard-money-page"
+            data-layout="single-column"
+          >
+            <PanelBoundary name="Money">
+              <MoneyPanel data={data} display={display} now={clockNow} />
+            </PanelBoundary>
+          </div>
+        ) : (
         <div
           className="domain-columns dashboard-home"
           data-layout="single-column"
           data-breakpoint="640"
         >
+          {showDecisions(data) ? (
+            <PanelBoundary name="Decisions">
+              <DecisionsPanel data={data} now={clockNow} />
+            </PanelBoundary>
+          ) : null}
+          {data.usage !== undefined ? (
+            <PanelBoundary name="Usage">
+              <UsagePanel data={data} now={clockNow} />
+            </PanelBoundary>
+          ) : null}
           {isLive(data.ai) ? (
             <PanelBoundary name="Bots">
               <BotsPanel data={data} now={clockNow} />
             </PanelBoundary>
           ) : null}
-          {showMoney(data) ? (
-            <PanelBoundary name="Money">
-              <MoneyPanel data={data} display={display} now={clockNow} />
-            </PanelBoundary>
-          ) : null}
           {showHealth(data) ? (
             <PanelBoundary name="Health">
               <HealthPanel data={data} display={display} now={clockNow} />
-            </PanelBoundary>
-          ) : null}
-          {isLive(data.calendar) ? (
-            <PanelBoundary name="Schedule">
-              <SchedulePanel data={data} display={display} now={clockNow} />
-            </PanelBoundary>
-          ) : null}
-          {isLive(data.reminders) ? (
-            <PanelBoundary name="Reminders">
-              <RemindersPanel data={data} now={clockNow} />
-            </PanelBoundary>
-          ) : null}
-          {isLive(data.build) ? (
-            <PanelBoundary name="GitHub">
-              <DashboardCard
-                id="github"
-                title="GitHub"
-                icon={Code2}
-                source={data.build}
-                now={clockNow}
-                className="dashboard-card-github"
-              >
-                <Build data={data} now={clockNow} />
-              </DashboardCard>
-            </PanelBoundary>
-          ) : null}
-          {isLive(data.goals) && (data.goals.data?.goals?.length ?? 0) > 0 ? (
-            <PanelBoundary name="Goals">
-              <DashboardCard
-                id="goals"
-                title="Goals"
-                icon={Target}
-                source={data.goals}
-                now={clockNow}
-                className="dashboard-card-goals"
-              >
-                <Goals data={data} now={clockNow} />
-              </DashboardCard>
-            </PanelBoundary>
-          ) : null}
-          {isLive(data.goals) && (data.goals.data?.projects?.length ?? 0) > 0 ? (
-            <PanelBoundary name="Projects">
-              <DashboardCard
-                id="projects"
-                title="Projects"
-                icon={Folder}
-                source={data.goals}
-                now={clockNow}
-                className="dashboard-card-projects"
-              >
-                <Projects data={data} now={clockNow} />
-              </DashboardCard>
             </PanelBoundary>
           ) : null}
           {isLive(data.systems) ? (
@@ -1185,12 +2067,8 @@ function LiveDashboard({
               </DashboardCard>
             </PanelBoundary>
           ) : null}
-          {showDecisions(data) ? (
-            <PanelBoundary name="Decisions">
-              <DecisionsPanel data={data} now={clockNow} />
-            </PanelBoundary>
-          ) : null}
         </div>
+        )}
       </SystemHistoryContext.Provider>
       <footer className="footer">
         <div

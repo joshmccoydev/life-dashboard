@@ -17,6 +17,9 @@ import type {
   DashboardData,
   DataState,
   DecisionsHomeState,
+  UsageProviderId,
+  UsageRow,
+  UsageState,
   WeatherState,
 } from "@/domains/models";
 import { localDateKey, zonedDateTime } from "@/lib/time";
@@ -264,6 +267,55 @@ function decisionsState(
   return feedState(entry, now, Math.max(config.intervals.ai, 3600000), data);
 }
 
+
+function isUsageId(value: unknown): value is UsageProviderId {
+  return (
+    value === "grok" ||
+    value === "chatgpt" ||
+    value === "opencode" ||
+    value === "nous"
+  );
+}
+
+function usageState(entry: FeedEntry, now: Date): DataState<UsageState> {
+  const raw = entry.data;
+  const interval = Math.max(config.intervals.ai, 3600000);
+  if (!isRecord(raw) || !Array.isArray(raw.providers)) {
+    return feedState<UsageState>(entry, now, interval, null);
+  }
+  const providers: UsageRow[] = [];
+  for (const item of raw.providers) {
+    if (!isRecord(item) || !isUsageId(item.id)) continue;
+    const pct =
+      typeof item.pct_used === "number" && Number.isFinite(item.pct_used)
+        ? item.pct_used
+        : null;
+    const cost =
+      typeof item.monthly_cost_usd === "number" &&
+      Number.isFinite(item.monthly_cost_usd)
+        ? item.monthly_cost_usd
+        : null;
+    providers.push({
+      id: item.id,
+      name: typeof item.name === "string" ? item.name : String(item.id),
+      plan: typeof item.plan === "string" ? item.plan : null,
+      monthly_cost_usd: cost,
+      pct_used: pct,
+      pct_window: item.pct_window === "weekly" ? "weekly" : null,
+      resets_at: typeof item.resets_at === "string" ? item.resets_at : null,
+      as_of: typeof item.as_of === "string" ? item.as_of : null,
+      source: typeof item.source === "string" ? item.source : null,
+      note: typeof item.note === "string" ? item.note : null,
+      stale: Boolean(item.stale),
+      manual: Boolean(item.manual),
+    });
+  }
+  if (!providers.length) {
+    return feedState<UsageState>(entry, now, interval, null);
+  }
+  return feedState(entry, now, interval, { providers });
+}
+
 export function dashboardFromFeeds(
   feeds: FeedSnapshot,
   now: Date,
@@ -278,6 +330,9 @@ export function dashboardFromFeeds(
   | "habits"
   | "goals"
   | "decisions"
+  | "usage"
+  | "weather"
+  | "build"
 > {
   return {
     calendar: feedState(
@@ -327,6 +382,9 @@ export function dashboardFromFeeds(
       applePart(feeds, "goals") as DashboardData["goals"]["data"],
     ),
     decisions: decisionsState(feeds.decisions, now),
+    usage: usageState(feeds.usage, now),
+    weather: feedState(feeds.weather, now, config.intervals.weather),
+    build: feedState(feeds.build, now, config.intervals.build),
   };
 }
 
@@ -339,14 +397,15 @@ export async function loadLiveDashboard(
   const incoming = await readKvFeeds(env?.FEEDS_KV);
   const feeds = mergeFeeds(null, incoming, now);
 
+  const fromFeeds = dashboardFromFeeds(feeds, now);
   const [weather, build] = await Promise.all([
-    fetchWeatherState(dependencies, now, config.intervals.weather),
-    fetchGitHubState(dependencies, now, config.intervals.build),
+    feeds.weather.data !== null ? Promise.resolve(fromFeeds.weather) : fetchWeatherState(dependencies, now, config.intervals.weather),
+    feeds.build.data !== null ? Promise.resolve(fromFeeds.build) : fetchGitHubState(dependencies, now, config.intervals.build),
   ]);
 
   return {
+    ...fromFeeds,
     weather,
-    ...dashboardFromFeeds(feeds, now),
     build,
   };
 }

@@ -9,6 +9,9 @@ const DOMAINS = [
   "host",
   "apple",
   "decisions",
+  "usage",
+  "weather",
+  "build",
 ] as const;
 const NOW = new Date("2026-11-01T16:30:00.000Z");
 const RECENT = "2026-11-01T16:20:00.000Z";

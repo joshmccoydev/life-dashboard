@@ -79,6 +79,7 @@ test("buildSnapshot accepts valid synthetic money data", () => {
     billsDueCount: 0,
     depositTarget: null,
     status: "ok",
+    bills: [],
   });
   assert.equal(snapshot.money.error, undefined);
 });

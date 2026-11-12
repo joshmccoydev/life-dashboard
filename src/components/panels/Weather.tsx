@@ -2,6 +2,15 @@ import { Cloud, CloudRain, CloudSnow, Moon, Sun, Wind } from "lucide-react";
 import type { DashboardData } from "@/domains/models";
 import { Feed } from "@/components/shared/feed";
 
+const BANNED_WEATHER_LOCATIONS = /\bchicago\b/i;
+
+/** Do not show a banned or default city. Do not invent a station in this pass. */
+function displayWeatherLocation(location: string | undefined | null): string | null {
+  if (!location || !location.trim()) return null;
+  if (BANNED_WEATHER_LOCATIONS.test(location)) return null;
+  return location;
+}
+
 export function Weather({ data, now }: { data: DashboardData; now: Date }) {
   const weather = data.weather.data;
   if (!weather)
@@ -45,8 +54,12 @@ export function Weather({ data, now }: { data: DashboardData; now: Date }) {
         <div>
           <strong>{weather.condition}</strong>
           <p>
-            {weather.location} <span>·</span> H {weather.high}° / L{" "}
-            {weather.low}°
+            {displayWeatherLocation(weather.location) ? (
+              <>
+                {displayWeatherLocation(weather.location)} <span>·</span>{" "}
+              </>
+            ) : null}
+            H {weather.high}° / L {weather.low}°
           </p>
         </div>
       </div>
