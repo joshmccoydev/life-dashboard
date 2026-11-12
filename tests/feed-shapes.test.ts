@@ -163,7 +163,7 @@ function snapshotUpdatedAt(updatedAt: string | null) {
 }
 
 function alertData(systemsData: unknown): DashboardData {
-  const state = <K extends keyof DashboardData>(
+  const state = <K extends Exclude<keyof DashboardData, "decisions">>(
     data: NonNullable<DashboardData[K]["data"]> | null,
   ): DataState<NonNullable<DashboardData[K]["data"]>> => ({
     loading: false,
@@ -253,9 +253,9 @@ test("botsToAiState maps producer bots and preserves AI telemetry states", () =>
     providers: [
       {
         name: "Synthetic alpha",
-        status: "idle",
+        status: "waiting",
         remainingPercent: null,
-        detail: "queued fixture",
+        detail: "waiting on Josh: review fixture",
         value: "needs Josh",
         requestsToday: null,
         tokensToday: null,

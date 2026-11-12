@@ -6,6 +6,7 @@ import {
   buildSnapshot as buildDecisionSnapshot,
   type Snapshot as DecisionSnapshot,
 } from "../src/lib/decisions";
+import { stripPrivate } from "../src/lib/privacy";
 
 export type Entry = {
   data: unknown;
@@ -270,7 +271,12 @@ export async function buildDecisions(options: {
       remindersFile,
       now: options.now,
     });
-    const cards = snapshot.cards.slice(0, DECISIONS_LIMIT);
+    const cards = snapshot.cards.slice(0, DECISIONS_LIMIT).map((card) => ({
+      ...card,
+      question: stripPrivate(card.question),
+      rec: stripPrivate(card.rec),
+      context: stripPrivate(card.context),
+    }));
 
     return {
       ok: true,
@@ -408,8 +414,16 @@ export function buildBots(
     updatedAt = null;
   }
 
+  const bots = parseStatus(statusMarkdown).map((item) => ({
+    ...item,
+    working_on: item.working_on ? stripPrivate(item.working_on) : item.working_on,
+    last_done: item.last_done ? stripPrivate(item.last_done) : item.last_done,
+    next_up: item.next_up ? stripPrivate(item.next_up) : item.next_up,
+    needs_josh: item.needs_josh ? stripPrivate(item.needs_josh) : item.needs_josh,
+  }));
+
   return {
-    data: { bots: parseStatus(statusMarkdown) },
+    data: { bots },
     updatedAt,
     source: "box:status",
     ...(stale ? { error: "status stale" } : {}),

@@ -1,7 +1,10 @@
-import { getDashboard, getDemoDashboard } from "@/adapters";
+import { getDemoDashboard } from "@/adapters";
 import { config } from "@/config";
 import { Dashboard } from "@/components/dashboard";
+import { loadLiveDashboard } from "@/lib/live-dashboard";
+
 export const dynamic = "force-dynamic";
+
 export default async function Page({
   searchParams,
 }: {
@@ -16,7 +19,7 @@ export default async function Page({
     : undefined;
   return (
     <Dashboard
-      initial={await (demo ? getDemoDashboard() : getDashboard())}
+      initial={await (demo ? getDemoDashboard() : loadLiveDashboard())}
       renderedAt={new Date().toISOString()}
       display={config.display}
       demo={demo}
