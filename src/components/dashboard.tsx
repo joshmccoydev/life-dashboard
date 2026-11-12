@@ -422,10 +422,29 @@ function BotsPanel({ data, now }: { data: DashboardData; now: Date }) {
                     className={`dashboard-bot-dot ${badge.kind}`}
                     title={badge.label}
                     aria-label={badge.label}
+                    role="img"
                   />
                 </li>
               );
             })}
+          </ul>
+          <ul className="dashboard-bots-legend" aria-label="Bot status">
+            <li>
+              <span className="dashboard-bot-dot working" aria-hidden="true" />
+              working
+            </li>
+            <li>
+              <span className="dashboard-bot-dot idle" aria-hidden="true" />
+              idle
+            </li>
+            <li>
+              <span className="dashboard-bot-dot blocked" aria-hidden="true" />
+              blocked
+            </li>
+            <li>
+              <span className="dashboard-bot-dot ask" aria-hidden="true" />
+              needs Josh
+            </li>
           </ul>
           {extra > 0 ? (
             <p className="dashboard-bots-more">
@@ -1172,11 +1191,10 @@ function DashboardStyles() {
       }
 
       .dashboard-decision-row {
-        display: flex;
-        flex-direction: row;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: 7.25rem minmax(0, 1fr);
         align-items: center;
-        gap: 8px;
+        column-gap: 10px;
         min-width: 0;
         min-height: 44px;
         padding: 6px 0;
@@ -1189,7 +1207,11 @@ function DashboardStyles() {
 
       .dashboard-decision-bot {
         display: inline-flex;
-        align-self: flex-start;
+        align-items: center;
+        justify-content: center;
+        align-self: center;
+        justify-self: start;
+        box-sizing: border-box;
         max-width: 100%;
         padding: 1px 8px;
         border-radius: 999px;
@@ -1204,7 +1226,7 @@ function DashboardStyles() {
 
       .dashboard-decision-q {
         margin: 0;
-        flex: 1 1 12rem;
+        min-width: 0;
         color: var(--color-text);
         font-size: 16px;
         font-weight: 500;
@@ -1213,6 +1235,7 @@ function DashboardStyles() {
       }
 
       .dashboard-decision-block {
+        grid-column: 2;
         color: var(--color-state-critical);
         font-size: 11px;
         font-weight: 600;
@@ -1320,6 +1343,24 @@ function DashboardStyles() {
       .dashboard-bot-dot.working { background: var(--color-state-good); }
       .dashboard-bot-dot.idle { background: var(--color-text-muted); }
       .dashboard-bot-dot.blocked { background: var(--color-state-caution); }
+      .dashboard-bots-legend {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 14px;
+        list-style: none;
+        margin: 8px 0 0;
+        padding: 0;
+        color: var(--color-text-muted);
+        font-size: 11px;
+        line-height: 1;
+      }
+      .dashboard-bots-legend li {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+      }
 
       .dash-tag {
         display: inline-flex;
