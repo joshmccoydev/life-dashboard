@@ -30,9 +30,7 @@ import type {
 import {
   ageLabel,
   asOfLabel,
-  dayKeyOffset,
   isStale,
-  localDateKey,
   modeAt,
 } from "@/lib/time";
 import { stripPrivate } from "@/lib/privacy";
@@ -59,8 +57,6 @@ import {
 import { Weather } from "@/components/panels/Weather";
 import { Feed } from "@/components/shared/feed";
 import { Build } from "@/components/panels/Build";
-import { Goals } from "@/components/panels/Goals";
-import { Habits } from "@/components/panels/Habits";
 import { Projects } from "@/components/panels/Projects";
 import { Systems } from "@/components/panels/Systems";
 import type { UseDashboardData } from "@/lib/use-dashboard-data";
@@ -586,23 +582,6 @@ function MoneyPanel({
   );
 }
 
-function habitStreak(data: DashboardData, now: Date, timezone: string) {
-  const completed = new Set(
-    (data.habits.data?.habits ?? []).flatMap((habit) =>
-      habit.occurrences
-        .filter((occurrence) => occurrence.completed)
-        .map((occurrence) => occurrence.date),
-    ),
-  );
-  const today = localDateKey(now, timezone);
-  let streak = 0;
-  for (let offset = 0; offset < 366; offset++) {
-    if (!completed.has(dayKeyOffset(now, -offset, timezone))) break;
-    streak++;
-  }
-  return { today, streak };
-}
-
 function HealthPanel({
   data,
   display,
@@ -656,26 +635,14 @@ function HealthPanel({
   }
 
   const health = raw as ExtendedHealthState | null;
-  const healthStreak = habitStreak(data, now, display.timezone);
-  const completedThisWeek = (data.habits.data?.habits ?? []).reduce(
-    (total, habit) =>
-      total +
-      habit.occurrences.filter(
-        (occurrence) =>
-          occurrence.completed &&
-          occurrence.date >= dayKeyOffset(now, -6, display.timezone) &&
-          occurrence.date <= healthStreak.today,
-      ).length,
-    0,
-  );
   const weekLabel = health?.week
     ? `${health.week.activeDays ?? 0} active days${
         health.week.steps !== undefined && health.week.goal
           ? ` · ${health.week.steps.toLocaleString(display.locale)}/${health.week.goal.toLocaleString(display.locale)} steps`
           : ""
       }`
-    : `${completedThisWeek} habit check-ins`;
-  const streakDays = health?.streak?.days ?? healthStreak.streak;
+    : undefined;
+  const streakDays = health?.streak?.days;
   const streakLabel = health?.streak?.label || "Habit streak";
 
   return (
@@ -707,22 +674,23 @@ function HealthPanel({
               ) : null}
             </div>
           ) : null}
-          <div>
-            <span>This week</span>
-            <strong>{weekLabel}</strong>
-          </div>
-          <div>
-            <span>Streak</span>
-            <strong>
-              {streakDays} {streakDays === 1 ? "day" : "days"}
-            </strong>
-            <p>{streakLabel}</p>
-          </div>
+          {weekLabel ? (
+            <div>
+              <span>This week</span>
+              <strong>{weekLabel}</strong>
+            </div>
+          ) : null}
+          {typeof streakDays === "number" ? (
+            <div>
+              <span>Streak</span>
+              <strong>
+                {streakDays} {streakDays === 1 ? "day" : "days"}
+              </strong>
+              <p>{streakLabel}</p>
+            </div>
+          ) : null}
         </div>
       )}
-      {isLive(data.habits) ? (
-        <Habits data={data} now={now} display={display} />
-      ) : null}
     </DashboardCard>
   );
 }
@@ -930,13 +898,23 @@ function SchedulePanel({
 }
 
 function RemindersPanel({ data, now }: { data: DashboardData; now: Date }) {
-  const reminders = [...(data.reminders.data?.items ?? [])].sort(
-    (left, right) => {
-      if (left.completed !== right.completed)
-        return Number(left.completed) - Number(right.completed);
-      return (left.due ?? "").localeCompare(right.due ?? "");
-    },
-  );
+  const today = chicagoYmd(now);
+  const allReminders = data.reminders.data?.items ?? [];
+  const groups = [
+    { label: "Overdue", items: [] as typeof allReminders },
+    { label: "Due", items: [] as typeof allReminders },
+    { label: "No date", items: [] as typeof allReminders },
+  ];
+  for (const reminder of allReminders) {
+    const due = reminder.due?.trim() ?? "";
+    const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(due);
+    const timestamp = due ? Date.parse(due) : NaN;
+    const hasDue = Number.isFinite(timestamp) || /^(?:past due|overdue)$/i.test(due);
+    const overdue = /^(?:past due|overdue)$/i.test(due) ||
+      (dateOnly ? due < today : Number.isFinite(timestamp) && timestamp < now.getTime());
+    const index = !hasDue ? 2 : overdue ? 0 : 1;
+    groups[index]?.items.push(reminder);
+  }
 
   return (
     <DashboardCard
@@ -949,17 +927,22 @@ function RemindersPanel({ data, now }: { data: DashboardData; now: Date }) {
     >
       {data.reminders.data === null ? (
         <div className="domain-empty">No data</div>
-      ) : reminders.length ? (
+      ) : groups.some((group) => group.items.length) ? (
         <div className="dashboard-reminder-list">
-          {reminders.slice(0, 5).map((reminder) => (
-            <div className="domain-list-row" key={reminder.id}>
-              <span>{reminder.title}</span>
-              <strong>{reminder.completed ? "Complete" : "Open"}</strong>
-            </div>
-          ))}
+          {groups.map(({ label, items }) => items.length ? (
+            <section className="dashboard-reminder-group" key={label} aria-label={label}>
+              <h3>{label}</h3>
+              {items.map((reminder) => (
+                <div className="domain-list-row" key={reminder.id}>
+                  <span>{reminder.title}</span>
+                  {label === "No date" ? null : <strong>{formatBillDue(reminder.due)}</strong>}
+                </div>
+              ))}
+            </section>
+          ) : null)}
         </div>
       ) : (
-        <div className="domain-empty">No upcoming payments</div>
+        <div className="domain-empty">No reminders</div>
       )}
       <Feed state={data.reminders} now={now} />
     </DashboardCard>
@@ -982,7 +965,7 @@ function DashboardStyles() {
         display: flex;
         gap: var(--space-2);
         padding: var(--space-2) var(--space-4);
-        border-bottom: 1px solid var(--color-border);
+        border-bottom: var(--hairline);
       }
 
       .dashboard-tab {
@@ -1003,7 +986,7 @@ function DashboardStyles() {
       }
 
       .dashboard-tab[aria-current="page"] {
-        border-color: var(--color-border-strong);
+        border-color: var(--comment);
         background: var(--color-surface-raised);
         color: var(--color-text);
       }
@@ -1017,8 +1000,8 @@ function DashboardStyles() {
       .dashboard-card {
         min-width: 0;
         overflow: hidden;
-        border: 1px solid var(--color-border);
-        border-radius: 0.5rem;
+        border: var(--hairline);
+        border-radius: var(--r);
         background: var(--color-surface);
       }
 
@@ -1035,7 +1018,7 @@ function DashboardStyles() {
         flex-wrap: wrap;
         gap: var(--space-3);
         padding: var(--space-3) var(--space-4);
-        border-bottom: 1px solid var(--color-border);
+        border-bottom: var(--hairline);
       }
 
       .dashboard-panel-heading {
@@ -1081,7 +1064,7 @@ function DashboardStyles() {
       .dashboard-panel-body > .domain-section {
         margin: calc(var(--space-3) * -1) calc(var(--space-4) * -1)
           calc(var(--space-3) * -1);
-        border-top: 1px solid var(--color-border);
+        border-top: var(--hairline);
       }
 
       .dashboard-bot-list,
@@ -1476,7 +1459,7 @@ function DashboardStyles() {
       .dashboard-tab:focus-visible,
       .dashboard-decisions-link:focus-visible,
       .alert-chip:focus-visible {
-        outline: 2px solid #8fc9be;
+        outline: var(--focus-ring);
         outline-offset: 2px;
       }
 
@@ -1741,7 +1724,7 @@ function DashboardStyles() {
         .header.dashboard-topbar {
           display: flex;
           flex-direction: row;
-          flex-wrap: nowrap;
+          flex-wrap: wrap;
           align-items: center;
           justify-content: space-between;
           gap: 12px;
@@ -1753,7 +1736,7 @@ function DashboardStyles() {
           justify-content: flex-end;
           align-items: center;
           gap: 10px;
-          width: auto;
+          width: 100%;
           flex: 1 1 auto;
           min-width: 0;
         }
@@ -1831,8 +1814,13 @@ function DashboardStyles() {
         }
         .dashboard-panel-heading h2 {
           font-size: 18px;
-          white-space: nowrap;
+          white-space: normal;
+          overflow-wrap: anywhere;
         }
+        .header.dashboard-topbar { align-items: flex-start; }
+        .header-right { justify-content: space-between; }
+        .weather { width: 100%; border-right: 0; padding-right: 0; }
+        .identity { width: 100%; justify-content: space-between; }
         .dashboard-usage-grid,
         .dashboard-bots-table td.run {
           /* keep last-run on phone unless it overflows; hide only run column at 360 per mock */
@@ -2033,29 +2021,27 @@ function LiveDashboard({
       </header>
       <nav
         className="dashboard-tabs"
-        role="tablist"
-        aria-label="Dashboard views"
+        aria-label="LifeDash navigation"
       >
         <a
           className="dashboard-tab"
           href="/"
-          role="tab"
           aria-current={page === "home" ? "page" : undefined}
-          aria-selected={page === "home"}
         >
           Home
         </a>
-        <a className="dashboard-tab" href="/decisions" role="tab">
+        <a className="dashboard-tab" href="/decisions">
           Decisions
         </a>
         <a
           className="dashboard-tab"
           href="/money"
-          role="tab"
           aria-current={page === "money" ? "page" : undefined}
-          aria-selected={page === "money"}
         >
           Money
+        </a>
+        <a className="dashboard-tab" href="https://agents.j0sh.wtf/">
+          Agents
         </a>
       </nav>
       <SystemHistoryContext.Provider value={systemHistory}>
@@ -2092,6 +2078,55 @@ function LiveDashboard({
           {showHealth(data) ? (
             <PanelBoundary name="Health">
               <HealthPanel data={data} display={display} now={clockNow} />
+            </PanelBoundary>
+          ) : null}
+          {isLive(data.reminders) ? (
+            <PanelBoundary name="Reminders">
+              <RemindersPanel data={data} now={clockNow} />
+            </PanelBoundary>
+          ) : null}
+          {isLive(data.habits) ? (
+            <PanelBoundary name="Habits">
+              <DashboardCard
+                id="habits"
+                title="Habits"
+                icon={Check}
+                source={data.habits}
+                now={clockNow}
+                className="dashboard-card-habits"
+              >
+                {data.habits.data?.habits.length ? (
+                  <div className="dashboard-habit-list">
+                    {data.habits.data.habits.map((habit, index) => (
+                      <div className="domain-list-row" key={habit.id || `${habit.title}-${index}`}>
+                        <span>{habit.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : <div className="domain-empty">No habits in the Habits list</div>}
+              </DashboardCard>
+            </PanelBoundary>
+          ) : null}
+          {isLive(data.goals) ? (
+            <PanelBoundary name="Goals">
+              <DashboardCard
+                id="goals"
+                title="Goals"
+                icon={Target}
+                source={data.goals}
+                now={clockNow}
+                className="dashboard-card-goals"
+              >
+                {data.goals.data?.goals.length ? (
+                  <div className="dashboard-goal-list">
+                    {data.goals.data.goals.map((goal, index) => (
+                      <div className="domain-list-row" key={goal.id || `${goal.title}-${index}`}>
+                        <span>{goal.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : <div className="domain-empty">No goals</div>}
+              </DashboardCard>
             </PanelBoundary>
           ) : null}
           {isLive(data.systems) ? (

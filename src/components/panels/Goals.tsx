@@ -1,6 +1,5 @@
 import type { DashboardData } from "@/domains/models";
 import { DomainSection } from "@/components/shared/DomainSection";
-import { goalDue } from "@/components/shared/format";
 
 export function Goals({ data, now }: { data: DashboardData; now: Date }) {
   const goals = data.goals.data;
@@ -13,19 +12,9 @@ export function Goals({ data, now }: { data: DashboardData; now: Date }) {
   return (
     <DomainSection label="Goals" source={data.goals} now={now}>
       <div className="domain-progress-list">
-        {goals.goals.slice(0, 3).map((goal) => (
-          <div key={goal.id || goal.title}>
-            <div className="domain-list-row">
-              <span>{goal.title}</span>
-              <strong>
-                {goal.current !== undefined && goal.target !== undefined
-                  ? `${goal.current}/${goal.target} ${goal.unit || ""}`
-                  : goalDue(goal.due) || "ACTIVE"}
-              </strong>
-            </div>
-            {goal.current === undefined && goal.detail ? (
-              <div className="domain-project-detail">{goal.detail}</div>
-            ) : null}
+        {goals.goals.map((goal, index) => (
+          <div className="domain-list-row" key={goal.id || `${goal.title}-${index}`}>
+            <span>{goal.title}</span>
           </div>
         ))}
         {!goals.goals.length ? (

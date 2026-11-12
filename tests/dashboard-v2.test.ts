@@ -320,17 +320,10 @@ test("dashboard uses a mobile-first card shell with a sticky clock and weather b
   assert.match(text, /\b61\b/);
   assert.doesNotMatch(text, /\bChicago\b/, "banned weather city must not appear");
 
-  assert.match(html, /role="tablist"/);
-  const homeTab =
-    html.match(
-      /<(?:a|button)\b[^>]*role="tab"[^>]*>[\s\S]*?Home[\s\S]*?<\/(?:a|button)>/,
-    )?.[0] ?? "";
-  const decisionsTab =
-    html.match(
-      /<(?:a|button)\b[^>]*role="tab"[^>]*>[\s\S]*?Decisions[\s\S]*?<\/(?:a|button)>/,
-    )?.[0] ?? "";
-  assert.match(homeTab, /aria-(?:selected="true"|current="page")/);
-  assert.ok(decisionsTab, "the Decisions tab must be rendered");
+  assert.match(html, /aria-label="LifeDash navigation"/);
+  assert.match(html, /<a class="dashboard-tab" href="\/" aria-current="page">Home<\/a>/);
+  assert.match(html, /<a class="dashboard-tab" href="\/decisions">Decisions<\/a>/);
+  assert.match(html, /<a class="dashboard-tab" href="https:\/\/agents\.j0sh\.wtf\/">Agents<\/a>/);
 
   for (const title of HOME_TITLES) {
     assert.match(
@@ -341,6 +334,33 @@ test("dashboard uses a mobile-first card shell with a sticky clock and weather b
   }
   assert.match(html, />Money</, "Money tab is present");
   assert.ok(!html.includes('id="money-title"'), "Money panel is not on Home");
+});
+
+test("Apple lists render with explicit reminder groups and names-only habits and goals", () => {
+  const data = fixture();
+  data.reminders = feed({ items: [
+    { id: "overdue", title: "Overdue reminder", due: "2026-10-31", listName: "Personal" },
+    { id: "due", title: "Due reminder", due: "2026-11-02", listName: "Tasks" },
+    { id: "no-date", title: "Undated reminder", due: null, listName: "Tasks" },
+  ] }) as unknown as DashboardData["reminders"];
+  data.habits = feed({ habits: [
+    { id: "habit", title: "Habit title", trackingMethod: "custom", occurrences: [] },
+  ] }) as unknown as DashboardData["habits"];
+  data.goals = feed({ goals: [
+    { title: "Goal title", current: 3, target: 9, due: "2026-12-01", detail: "excluded" },
+  ], projects: [] }) as unknown as DashboardData["goals"];
+  const html = renderDashboard(data);
+  const reminders = panel(html, "Reminders");
+  const habits = panel(html, "Habits");
+  const goals = panel(html, "Goals");
+
+  for (const group of ["Overdue", "Due", "No date"]) assert.match(reminders.text, new RegExp(group));
+  assert.match(reminders.text, /Overdue reminder[\s\S]*Due reminder[\s\S]*Undated reminder/);
+  assert.doesNotMatch(reminders.text, /\b(?:Open|Complete)\b/);
+  assert.match(habits.text, /Habit title/);
+  assert.doesNotMatch(habits.text, /\b(?:complete|missed|streak|\d+\/\d+)\b/i);
+  assert.match(goals.text, /Goal title/);
+  assert.doesNotMatch(goals.text, /3\/9|2026|excluded|ACTIVE/);
 });
 
 test("Bots, Money, and Health follow the v2 Home / Money split", () => {
@@ -386,14 +406,17 @@ test("Home leads with Bots, Health, and Systems; Money is its own page", () => {
   assert.match(html, /href="\/money"/);
   assert.match(panel(html, "Systems").text, /Mac mini/);
   assert.ok(!html.includes('id="schedule-title"'));
-  assert.ok(!html.includes('id="reminders-title"'));
+  assert.ok(html.includes('id="reminders-title"'));
+  assert.ok(html.includes('id="habits-title"'));
+  assert.ok(html.includes('id="goals-title"'));
   assert.ok(!html.includes('id="github-title"'));
 });
 
 test("every Home panel shows an updated time and stale or empty states stay explicit", () => {
   const data = fixture();
   const freshHtml = renderDashboard(data);
-  for (const title of HOME_TITLES) {
+  const applePanels = [...HOME_TITLES, "Reminders", "Habits", "Goals"];
+  for (const title of applePanels) {
     assert.match(
       panel(freshHtml, title).text,
       /\bUpdated\b[\s\S]{0,24}(?:just now|today|\d{1,2}:\d{2}|\d+\s*(?:s|m|h|d))/i,
@@ -408,7 +431,7 @@ test("every Home panel shows an updated time and stale or empty states stay expl
     (state as { status: string; lastSuccess: string }).lastSuccess = STALE_SINCE;
   }
   const staleHtml = renderDashboard(stale);
-  for (const title of HOME_TITLES) {
+  for (const title of applePanels) {
     assert.match(panel(staleHtml, title).text, /\bstale\b/i);
   }
 

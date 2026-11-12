@@ -49,6 +49,7 @@ export type RawUsage = {
   monthly_cost_usd: number | null;
   source: string | null;
   note: string | null;
+  stale_after_hours?: number | null;
 };
 
 export const USAGE_DEFAULT_PATHS: {
@@ -69,6 +70,7 @@ export const USAGE_DEFAULT_PATHS: {
 };
 
 export const USAGE_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
+export const CHATGPT_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
 
 const PROVIDER_META: Record<
   UsageProviderId,
@@ -125,6 +127,9 @@ export function parseUsageFile(payload: unknown): RawUsage | null {
     ),
     source: cleanString(payload.source),
     note: cleanString(payload.note),
+    ...(finiteNumber(payload.stale_after_hours) !== null
+      ? { stale_after_hours: finiteNumber(payload.stale_after_hours) }
+      : {}),
   };
 }
 
@@ -272,7 +277,13 @@ export function toUsageRow(
     cost = planCostFromSheet(costSheet, id, raw.plan);
   }
   const manual = isUsageManual(raw.source);
-  const stale = isUsageStale(raw, now);
+  const staleAfterMs =
+    raw.stale_after_hours != null
+      ? raw.stale_after_hours * 60 * 60 * 1000
+      : id === "chatgpt"
+        ? CHATGPT_STALE_AFTER_MS
+        : USAGE_STALE_AFTER_MS;
+  const stale = isUsageStale(raw, now, staleAfterMs);
   return {
     ...base,
     plan: raw.plan,

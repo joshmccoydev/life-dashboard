@@ -326,43 +326,43 @@ test("evaluateAlerts tolerates producer system data missing machine or endpoints
   assert.deepEqual(evaluateAlerts(alertData(machineOnly), FIXED_NOW), []);
 });
 
-test("producer entries stay fresh for two hours and KV data gets an hourly refresh floor", async () => {
+test("producer entries stay fresh for 24 hours and KV data keeps an hourly refresh floor", async () => {
   assert.equal(
     isStale(RECENT_ISO, FIXED_NOW, HOUR_MS),
     false,
-    "a five-minute-old producer snapshot is fresh at the hourly floor",
+    "a five-minute-old producer snapshot is fresh",
   );
   assert.equal(
-    isStale("2026-11-01T14:30:00.000Z", FIXED_NOW, HOUR_MS),
+    isStale("2026-10-31T16:30:00.000Z", FIXED_NOW, HOUR_MS),
     false,
-    "the two-refresh boundary remains fresh",
+    "the 24-hour boundary remains fresh",
   );
   assert.equal(
-    isStale("2026-11-01T14:29:59.999Z", FIXED_NOW, HOUR_MS),
+    isStale("2026-10-31T16:29:59.999Z", FIXED_NOW, HOUR_MS),
     true,
-    "data older than the boundary is stale",
+    "data older than 24 hours is stale",
   );
 
-  const ninetyMinutes = mergeFeeds(
+  const twentyThreeHours = mergeFeeds(
     null,
-    snapshotUpdatedAt("2026-11-01T15:00:00.000Z"),
+    snapshotUpdatedAt("2026-10-31T17:30:00.000Z"),
     FIXED_NOW,
   );
-  const exactlyTwoHours = mergeFeeds(
+  const exactlyTwentyFourHours = mergeFeeds(
     null,
-    snapshotUpdatedAt("2026-11-01T14:30:00.000Z"),
+    snapshotUpdatedAt("2026-10-31T16:30:00.000Z"),
     FIXED_NOW,
   );
-  const olderThanTwoHours = mergeFeeds(
+  const olderThanTwentyFourHours = mergeFeeds(
     null,
-    snapshotUpdatedAt("2026-11-01T14:29:59.999Z"),
+    snapshotUpdatedAt("2026-10-31T16:29:59.999Z"),
     FIXED_NOW,
   );
 
   for (const domain of ["bots", "money", "health", "host"] as const) {
-    assert.equal(ninetyMinutes[domain].stale, false, domain);
-    assert.equal(exactlyTwoHours[domain].stale, false, domain);
-    assert.equal(olderThanTwoHours[domain].stale, true, domain);
+    assert.equal(twentyThreeHours[domain].stale, false, domain);
+    assert.equal(exactlyTwentyFourHours[domain].stale, false, domain);
+    assert.equal(olderThanTwentyFourHours[domain].stale, true, domain);
   }
 
   const { response, payload } = await requestDashboard();

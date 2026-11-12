@@ -43,7 +43,7 @@ export function evaluateAlerts(
       });
   }
   const overdue = (data.reminders.data?.items ?? []).filter(
-    (r) => !r.completed && r.due !== null && Date.parse(r.due) < time,
+    (r) => r.completed === false && r.due !== null && Date.parse(r.due) < time,
   );
   if (overdue.length && (includeDemo || data.reminders.source === "real"))
     alerts.push({

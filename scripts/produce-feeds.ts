@@ -155,7 +155,7 @@ export const DEFAULT_PATHS: FeedPaths = {
   status: "/workspace/vault/00 Home/Bots/Status.md",
   money: "/workspace/exports/buffett-dash.json",
   health: "/workspace/exports/arnold-dash.json",
-  apple: "/workspace/exports/apple-dash.json",
+  apple: "/workspace/exports/life-dash/apple-dash.json",
   openDecisions: OPEN_DECISIONS_PATH,
   grokPrimary: USAGE_DEFAULT_PATHS.grokPrimary,
   grokFallback: USAGE_DEFAULT_PATHS.grokFallback,
@@ -649,13 +649,29 @@ export function buildApple(
     if (entry.error) throw new Error("apple export invalid");
 
     const parsed = isRecord(entry.data) ? entry.data : {};
+    const lists = isRecord(parsed.lists) ? parsed.lists : {};
+    const stamp = asOf(parsed);
+    const listItems = (name: string) =>
+      (Array.isArray(lists[name]) ? lists[name] : [])
+        .filter(isRecord)
+        .map((item) => ({
+          title: typeof item.title === "string" ? stripPrivate(item.title).trim() : "",
+          due: typeof item.due === "string" && Number.isFinite(Date.parse(item.due)) ? item.due : null,
+          flagged: item.flagged === true,
+        }))
+        .filter((item) => item.title.length > 0);
+    const personalAndTasks = [...listItems("Personal"), ...listItems("Tasks")];
+    const reminders = { as_of: stamp, items: personalAndTasks.map((item, index) => ({ id: `apple-reminder-${index}`, ...item })) };
+    const habits = { as_of: stamp, habits: listItems("Habits").map((item, index) => ({ id: `apple-habit-${index}`, title: item.title, trackingMethod: "custom" as const, occurrences: [] })) };
+    const goals = { as_of: stamp, goals: listItems("Goals").map((item) => ({ title: item.title })) };
     return {
       ...entry,
+      updatedAt: stamp ?? entry.updatedAt,
       data: {
-        calendar: parsed.calendar ?? null,
-        reminders: parsed.reminders ?? null,
-        habits: parsed.habits ?? null,
-        goals: parsed.goals ?? null,
+        calendar: isRecord(parsed.calendar) ? { ...parsed.calendar, as_of: stamp } : parsed.calendar ?? null,
+        reminders,
+        habits,
+        goals,
       },
     };
   } catch {

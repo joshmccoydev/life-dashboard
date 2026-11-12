@@ -1,247 +1,136 @@
-/* LifeDash display system: calibrated for a 16:9 screen viewed at a distance. */
 :root {
-  color-scheme: dark;
+  /* surfaces */
+  --bg: #282A36;            /* page background */
+  --surface: #44475A;       /* message rows, skeleton */
+  --surface-hover: #515365; /* desktop row hover */
+  /* text */
+  --fg: #F8F8F2;            /* body, subjects */
+  --fg-muted: #B2BACE;      /* timestamps, work_id, kind, meta */
+  --comment: #6272A4;       /* decorative: borders at alpha, empty glyph, large text only */
+  /* sides */
+  --side-hermes: #BD93F9;  --side-hermes-text: #DAC5F6;
+  --side-grok: #8BE9FD;    --side-grok-text: #8BE9FD;
+  --side-grok-indent: 16px; /* 12px below 480px */
+  /* needs states */
+  --need-blocking: #FF5555; --need-blocking-text: #FBB3AF;
+  --need-action: #FFB86C;   --need-action-text: #FDCB93;
+  --need-waiting: #F1FA8C;  --need-waiting-text: #F1FA8C;
+  --need-clear: #50FA7B;    --need-clear-text: #50FA7B;
+  /* accent + focus */
+  --accent-active: #FF79C6; --accent-active-text: #FCB8DC;
+  --focus-ring: 2px solid #FF79C6;
+  /* pills: state color at 14% over surface */
+  --pill-alpha: 14%;
+  /* lines */
+  --hairline: 1px solid rgba(98, 114, 164, 0.25);
+  --border-strong: 1px solid rgba(98, 114, 164, 0.40);
+  /* type */
+  --font-ui: "Inter", -apple-system, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --text-meta: 11px; --text-time: 12px; --text-chip: 13px;
+  --text-body: 15px;   /* 16px at ≥768 */
+  --text-subject: 17px;/* 15px below 480 */
+  --text-title: 21px;
+  /* space (4px grid) */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px; --s12: 48px;
+  /* shape */
+  --r-sm: 8px; --r: 10px; --r-lg: 12px; --r-pill: 999px;
+  /* motion */
+  --dur-fast: 150ms; --dur: 200ms; --dur-slow: 280ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 
-  /* Day palette: calm blue-green on OLED black, with state colors reserved for state. */
-  --color-canvas: #080b0d;
-  --color-surface: #0c1013;
-  --color-surface-raised: #11171b;
-  --color-surface-emphasis: #151e22;
-  --color-text: #f2f5f3;
-  --color-text-secondary: #bec9c8;
-  --color-text-muted: #8e9d9d;
-  --color-border: #263235;
-  --color-border-strong: #344448;
-  --color-accent: #8fc9be;
-  --color-accent-soft: #203631;
-  --color-state-good: #8fc5a2;
-  --color-state-caution: #e0b776;
-  --color-state-critical: #df8984;
-
-  /* Keep legacy selectors on the same palette while the stylesheet is migrated. */
-  --bg: var(--color-canvas);
-  --panel: var(--color-surface);
-  --text: var(--color-text);
-  --secondary: var(--color-text-secondary);
-  --muted: var(--color-text-muted);
-  --line: var(--color-border);
-  --blue: var(--color-accent);
-  --green: var(--color-state-good);
-  --amber: var(--color-state-caution);
-  --red: var(--color-state-critical);
-
-  --font-ui: var(--font-display), "Avenir Next", "Segoe UI", sans-serif;
-  --font-mono: "SFMono-Regular", "Cascadia Code", "Liberation Mono", monospace;
-  /* Every tier keeps a >=20px floor at 1920x1080 and scales with viewport
-     width, so the 4K layout is exactly 2x the 1080p layout. The svh term is
-     written as an exact `calc(100svh * N / D)` fraction: Lightning CSS rounds
-     decimal svh constants to 6 significant digits, which made the Turbopack
-     and webpack builds render slightly different text. */
-  --type-tier-1: clamp(3rem, min(3.6vw, calc(100svh * 8 / 125)), 6rem);
-  --type-tier-2: clamp(1.6rem, min(1.8vw, calc(100svh * 4 / 125)), 2.6rem);
-  --type-tier-3: clamp(1.4rem, min(1.5vw, calc(100svh * 2 / 75)), 2.2rem);
-  --type-detail: clamp(1rem, min(1.2vw, calc(100svh * 8 / 375)), 1.7rem);
-  --type-micro: clamp(1rem, min(1.05vw, calc(100svh * 7 / 375)), 1.5rem);
-
-  --overscan-inline: 3.25%;
-  --overscan-block: 1.4%;
-  --space-1: clamp(0.2rem, min(0.25vw, calc(100svh * 1 / 225)), 0.5rem);
-  --space-2: clamp(0.4rem, min(0.5vw, calc(100svh * 2 / 225)), 0.9rem);
-  --space-3: clamp(0.6rem, min(0.7vw, calc(100svh * 14 / 1125)), 1.2rem);
-  --space-4: clamp(0.9rem, min(1vw, calc(100svh * 4 / 225)), 1.7rem);
-  --space-5: clamp(1.3rem, min(1.5vw, calc(100svh * 2 / 75)), 2.4rem);
-  --space-6: clamp(1.8rem, min(2.2vw, calc(100svh * 44 / 1125)), 3.4rem);
-
-  --auto-dim-idle: 0.72;
-  --auto-dim-night: 0.62;
-  --display-luminance-day: 1;
-  --display-luminance-night: 0.35;
-
-  font-family: var(--font-ui);
-  font-synthesis: none;
-  /* Scale from the 16:9 canvas, not a pillarboxed viewport's outer width. */
-  /* Parity note: Lightning CSS folds this calc to `1.86667svh` (rounded UP from
-     1.866666...). At 16:9 the `1.05vw` term must win min(), and it only does so
-     because that rounding goes up; a minifier that rounded down would let the
-     svh term win by a sub-pixel amount. Tests pin the fraction itself. */
-  font-size: clamp(20px, min(1.05vw, calc(100svh * 7 / 375)), 42px);
-  font-variant-numeric: tabular-nums lining-nums;
-  background: var(--color-canvas);
-  color: var(--color-text);
+  /* LifeDash component aliases, mapped to the shared Dracula system. */
+  --color-canvas: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-hover);
+  --color-surface-emphasis: var(--surface-hover);
+  --color-text: var(--fg);
+  --color-text-secondary: var(--fg-muted);
+  --color-text-muted: var(--fg-muted);
+  --color-border: var(--comment);
+  --color-border-strong: var(--comment);
+  --color-accent: var(--side-grok-text);
+  --color-accent-soft: color-mix(in srgb, var(--side-grok) 14%, var(--surface));
+  --color-state-good: var(--need-clear-text);
+  --color-state-caution: var(--need-action-text);
+  --color-state-critical: var(--need-blocking-text);
+  --panel: var(--surface);
+  --text: var(--fg);
+  --secondary: var(--fg-muted);
+  --muted: var(--fg-muted);
+  --line: var(--comment);
+  --blue: var(--side-grok-text);
+  --green: var(--need-clear-text);
+  --amber: var(--need-action-text);
+  --red: var(--need-blocking-text);
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --type-tier-1: clamp(2rem, 5vw, 3.5rem);
+  --type-tier-2: clamp(1.5rem, 3.5vw, 2rem);
+  --type-tier-3: clamp(1.1rem, 2vw, 1.4rem);
+  --type-detail: var(--text-body);
+  --type-micro: var(--text-meta);
+  --space-1: var(--s1);
+  --space-2: var(--s2);
+  --space-3: var(--s3);
+  --space-4: var(--s4);
+  --space-5: var(--s5);
+  --space-6: var(--s6);
+  --overscan-inline: var(--s4);
+  --overscan-block: var(--s4);
+  --display-luminance-night: 1;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-  }
+* { min-width: 0; }
+
+html, body { min-height: 100%; background: var(--bg); color: var(--fg); }
+
+body { font-family: var(--font-ui); }
+
+@font-face {
+  font-family: Inter;
+  src: url("/fonts/inter-latin-400.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
 }
 
-main.dashboard {
-  container: dashboard / inline-size;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: var(--space-2);
-  width: 100%;
-  /* 16:9 canvas that is always bounded by the viewport height. */
-  max-width: calc(100svh * 16 / 9);
-  height: 100svh;
-  margin-inline: auto;
-  padding: var(--overscan-block) var(--overscan-inline);
-  overflow: hidden;
-  background: var(--color-canvas);
+@font-face {
+  font-family: Inter;
+  src: url("/fonts/inter-latin-500.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
 }
 
-.domain-columns {
-  gap: var(--space-3);
+@font-face {
+  font-family: Inter;
+  src: url("/fonts/inter-latin-600.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
 }
 
-.domain-column {
-  background: var(--color-surface);
-  border-color: var(--color-border);
-  border-radius: 0.75rem;
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/jetbrains-mono-latin-400.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
 }
 
-.domain-column-header {
-  min-height: 0;
-  padding: var(--space-2) var(--space-3);
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/jetbrains-mono-latin-500.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
 }
 
-.domain-column-header > svg,
-.domain-column-header h2 {
-  color: var(--color-accent);
-}
-
-.domain-column-header h2 {
-  font-size: var(--type-tier-3);
-  letter-spacing: -0.025em;
-}
-
-.domain-column-header span,
-.domain-section-header h3,
-.domain-inline-label > span:first-child {
-  font-size: var(--type-micro);
-  letter-spacing: 0.035em;
-}
-
-.domain-section {
-  padding: var(--space-2) var(--space-3);
-}
-
-.domain-next-event > strong {
-  color: var(--color-text);
-  font-size: var(--type-tier-2);
-}
-
-.domain-next-event > strong small {
-  font-size: var(--type-micro);
-}
-
-.domain-next-event h4 {
-  color: var(--color-text);
-  font-size: var(--type-tier-3);
-}
-
-.domain-next-event span,
-.domain-list-row,
-.domain-status-row,
-.domain-habit-row,
-.domain-empty,
-.domain-section-summary,
-.domain-project-detail,
-.domain-project .domain-list-row > span,
-.domain-project p,
-.domain-feature-row {
-  font-size: var(--type-detail);
-}
-
-.domain-list-row strong,
-.domain-status-row strong,
-.domain-habit-row strong,
-.domain-provider-value strong,
-.domain-provider-value small,
-.domain-feature-row strong {
-  font-size: var(--type-micro);
-}
-
-.domain-habit-days > div {
-  grid-template-columns: repeat(7, 1.05em);
-  gap: 0.3em;
-}
-
-.domain-habit-days i {
-  font-size: var(--type-micro);
-}
-
-.domain-habit-row .habit-week i {
-  width: 0.58rem;
-  height: 0.58rem;
-}
-
-.domain-metrics strong {
-  color: var(--color-text);
-  font-size: var(--type-tier-3);
-}
-
-.domain-metrics.compact strong {
-  font-size: var(--type-tier-3);
-}
-
-.domain-metrics span {
-  font-size: var(--type-micro);
-}
-
-.domain-project {
-  border-color: var(--color-border);
-}
-
-.domain-provider-list .domain-list-row,
-.domain-status-list .domain-status-row {
-  border-color: var(--color-border);
-}
-
-.domain-home .domain-list-row strong {
-  color: var(--color-text-secondary);
-}
-
-.mode-morning .personal-column,
-.mode-evening .personal-column,
-.mode-day .work-column {
-  border-color: var(--color-accent);
-}
-
-.mode-night {
-  --color-canvas: #050607;
-  --color-surface: #080a0b;
-  --color-surface-raised: #0b0e10;
-  --color-surface-emphasis: #101416;
-  --color-text: #c2c9c8;
-  --color-text-secondary: #a1acab;
-  --color-text-muted: #858f8e;
-  --color-border: #1d2425;
-  --color-border-strong: #283132;
-  --color-accent: #789b94;
-  --color-accent-soft: #192421;
-  --color-state-good: #78977f;
-  --color-state-caution: #a58a61;
-  --color-state-critical: #a46d69;
-  --bg: var(--color-canvas);
-  --panel: var(--color-surface);
-  --text: var(--color-text);
-  --secondary: var(--color-text-secondary);
-  --muted: var(--color-text-muted);
-  --line: var(--color-border);
-  --blue: var(--color-accent);
-  --green: var(--color-state-good);
-  --amber: var(--color-state-caution);
-  --red: var(--color-state-critical);
-  filter: brightness(var(--display-luminance-night));
-}
-
-@media (max-aspect-ratio: 4 / 3) {
-  main.dashboard {
-    max-width: none;
-    height: auto;
-    min-height: 100svh;
-    overflow: visible;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

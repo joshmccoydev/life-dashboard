@@ -280,6 +280,42 @@ test("buildApple marks a missing apple export as not wired", () => {
   });
 });
 
+test("Apple export defaults to LifeDash path and allowlists its four panel lists", () => {
+  assert.equal(DEFAULT_PATHS.apple, "/workspace/exports/life-dash/apple-dash.json");
+  const as_of = "2026-11-12T10:00:00-06:00";
+  const path = DEFAULT_PATHS.apple;
+  const entry = buildApple(
+    { apple: path },
+    inlineReadFile({
+      [path]: JSON.stringify({
+        as_of,
+        source: "mac-reminders",
+        lists: {
+          Personal: [{ title: "Personal item", due: "2026-11-13", flagged: true, completed: true, notes: "private" }],
+          Tasks: [{ title: "Task item", due: null, flagged: false, completed: false }],
+          Habits: [{ title: "Habit item", due: "2026-11-15", flagged: false }],
+          Goals: [{ title: "Goal title", due: "2026-12-01", flagged: false, amount: 99 }],
+          Other: [{ title: "excluded" }],
+        },
+      }),
+    }),
+  );
+  const data = entry.data as {
+    reminders: { as_of: string; items: { title: string; due: string | null; flagged: boolean }[] };
+    habits: { as_of: string; habits: { title: string }[] };
+    goals: { as_of: string; goals: { title: string }[] };
+  };
+  assert.equal(data.reminders.as_of, as_of);
+  assert.deepEqual(data.reminders.items.map(({ title, due, flagged }) => ({ title, due, flagged })), [
+    { title: "Personal item", due: "2026-11-13", flagged: true },
+    { title: "Task item", due: null, flagged: false },
+  ]);
+  assert.deepEqual(data.habits.habits.map(({ title }) => title), ["Habit item"]);
+  assert.deepEqual(data.goals.goals, [{ title: "Goal title" }]);
+  assert.equal(data.habits.as_of, as_of);
+  assert.equal(data.goals.as_of, as_of);
+});
+
 test("buildSnapshot assigns the requested source to every entry", () => {
   const now = new Date("2026-10-31T14:00:00.000Z");
   const files = {

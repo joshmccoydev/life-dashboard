@@ -172,6 +172,64 @@ test("manual Nov 5 rows are stale; live Grok is not; tag prefers stale", () => {
   assert.equal(usageTag(nous), "manual");
 });
 
+test("ChatGPT defaults to a six-hour stale window and honors stale_after_hours", () => {
+  const fiveHoursOld = toUsageRow("chatgpt", {
+    as_of: "2026-11-12T05:50:00-06:00",
+    plan: "ChatGPT Plus",
+    pct_used: 12,
+    resets_at: null,
+    monthly_cost_usd: null,
+    source: "codex-session-rate-limits",
+    note: null,
+  }, NOW);
+  const sevenHoursOld = toUsageRow("chatgpt", {
+    as_of: "2026-11-12T03:50:00-06:00",
+    plan: "ChatGPT Plus",
+    pct_used: 12,
+    resets_at: null,
+    monthly_cost_usd: null,
+    source: "codex-session-rate-limits",
+    note: null,
+  }, NOW);
+  const explicitWindow = toUsageRow("chatgpt", {
+    as_of: "2026-11-12T07:50:00-06:00",
+    plan: "ChatGPT Plus",
+    pct_used: 12,
+    resets_at: null,
+    monthly_cost_usd: null,
+    source: "codex-session-rate-limits",
+    note: null,
+    stale_after_hours: 2,
+  }, NOW);
+  assert.equal(fiveHoursOld.stale, false);
+  assert.equal(sevenHoursOld.stale, true);
+  assert.equal(explicitWindow.stale, true);
+});
+
+test("OpenCode Go live export values flow through the usage builder", () => {
+  assert.equal(USAGE_DEFAULT_PATHS.opencode, "/workspace/exports/usage/opencode.json");
+  const live = {
+    as_of: "2026-11-12T10:45:00-06:00",
+    plan: "OpenCode Go",
+    pct_used: 38,
+    resets_at: "2026-11-19T00:00:00-06:00",
+    monthly_cost_usd: 10,
+    source: "opencode-usage-export",
+  };
+  const state = buildUsageState({
+    readFile: files({ [USAGE_DEFAULT_PATHS.opencode]: JSON.stringify(live) }),
+    now: NOW,
+    costSheet: "",
+  });
+  const row = state.providers.find((provider) => provider.id === "opencode");
+  assert.equal(row?.pct_used, 38);
+  assert.equal(row?.resets_at, live.resets_at);
+  assert.equal(row?.plan, live.plan);
+  assert.equal(row?.monthly_cost_usd, 10);
+  assert.equal(row?.source, live.source);
+  assert.equal(row?.stale, false);
+});
+
 test("missing files become no-data rows; values come from files not constants", () => {
   const empty = buildUsageState({
     readFile: files({}),

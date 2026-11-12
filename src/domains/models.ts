@@ -43,7 +43,7 @@ export type ReminderState = {
     id: string;
     title: string;
     due: string | null;
-    completed: boolean;
+    completed?: boolean;
     listName?: string;
     notes?: string | null;
     dashboardRole?: "payment" | "goal" | "project" | "ordinary";

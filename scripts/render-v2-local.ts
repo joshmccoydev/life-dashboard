@@ -49,20 +49,13 @@ function pageHtml(body: string, title: string): string {
     "utf8",
   );
   return `<!DOCTYPE html>
-<html lang="en" class="font-display">
+<html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
 <title>${title}</title>
 <style>
-@font-face {
-  font-family: "Albert Sans";
-  src: url("fonts/albert-sans-variable.ttf") format("truetype");
-  font-weight: 100 900;
-  font-display: swap;
-}
-:root { --font-display: "Albert Sans", "Avenir Next", "Segoe UI", system-ui, sans-serif; }
-html, body { margin: 0; background: #080b0d; font-family: var(--font-display); }
+html, body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-ui); }
 ${tokens}
 ${globals}
 </style>

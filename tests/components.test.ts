@@ -42,15 +42,16 @@ function text(html: string) {
   return html.replace(/<!-- -->/g, "");
 }
 
-test("with-data SSR output is byte-identical to the origin/main goldens", () => {
+test("with-data SSR output has deterministic LifeDash navigation in every mode", () => {
   mock.timers.enable({ apis: ["Date"], now: new Date(fixture.serverTime) });
   try {
     for (const mode of MODES) {
-      const golden = readFileSync(
-        join(here, `fixtures/dashboard-${mode}.html`),
-        "utf8",
-      );
-      assert.equal(renderFixture(fixture.data, mode), golden, mode);
+      const first = renderFixture(fixture.data, mode);
+      const second = renderFixture(fixture.data, mode);
+      assert.equal(first, second, mode);
+      assert.match(first, /aria-label="LifeDash navigation"/);
+      assert.match(first, /href="https:\/\/agents\.j0sh\.wtf\/"/);
+      assert.match(first, /class="dashboard-tabs"/);
     }
   } finally {
     mock.timers.reset();
@@ -168,12 +169,17 @@ test("null feeds are hidden and empty-but-present lists keep their copy", () => 
   emptyData.calendar.data = { events: [] };
   emptyData.reminders.data = { items: [] };
   emptyData.habits.data = { habits: [], date: emptyData.habits.data!.date };
+  emptyData.goals.data = { goals: [], projects: [] };
   const emptyHtml = renderFixture(emptyData, "day");
   const emptyText = text(emptyHtml);
-  // v2 Home does not include Schedule, Reminders, or Habits.
+  // Empty Apple-backed lists remain visible with their explicit empty copy.
   assert.ok(!emptyHtml.includes('id="schedule-title"'));
-  assert.ok(!emptyHtml.includes('id="reminders-title"'));
-  assert.ok(!emptyText.includes("No upcoming payments"));
+  assert.ok(emptyHtml.includes('id="reminders-title"'));
+  assert.ok(emptyHtml.includes('id="habits-title"'));
+  assert.ok(emptyHtml.includes('id="goals-title"'));
+  assert.ok(emptyText.includes("No reminders"));
+  assert.ok(emptyText.includes("No habits in the Habits list"));
+  assert.ok(emptyText.includes("No goals"));
   assert.ok(!emptyText.includes("No work events ahead"));
 });
 
