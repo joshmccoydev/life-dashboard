@@ -413,14 +413,49 @@ test("every panel shows an updated time and stale or empty states stay explicit"
   }
   const emptyHtml = renderDashboard(empty);
   for (const title of PANEL_TITLES) {
-    assert.match(panel(emptyHtml, title).text, /\b(?:empty|no data)\b/i);
+    assert.doesNotMatch(
+      emptyHtml,
+      new RegExp(`>(?:${title})<`),
+      `${title} should be hidden when it has no real data`,
+    );
   }
 });
 
-test("Decisions is a linked placeholder for the Decisions branch", () => {
+test("Decisions home list shows real cards and the inbox stays linked", () => {
   const html = renderDashboard(fixture());
   const text = visibleText(html);
 
   assert.match(html, /href="\/decisions"/);
-  assert.match(text, /decisions coming from feat\/decisions/i);
+  assert.doesNotMatch(text, /decisions coming from feat\/decisions/i);
+  // Fixture has no decisions payload: the home slot is hidden, the tab remains.
+  assert.doesNotMatch(html, /id="decisions-title"/);
+
+  const withDecisions = structuredClone(fixture());
+  withDecisions.decisions = feed({
+    count: 3,
+    generatedAt: UPDATED,
+    cards: [
+      {
+        id: "d_one",
+        bot: "Forge",
+        question: "Merge the life-dashboard real-data PR?",
+        blocking: true,
+      },
+      {
+        id: "d_two",
+        bot: "Coach",
+        question: "Pick an eye exam time",
+        blocking: false,
+      },
+    ],
+  });
+  const decisionsHtml = renderDashboard(withDecisions);
+  const decisions = panel(decisionsHtml, "Decisions");
+  assert.match(decisions.text, /3 open items/);
+  assert.match(decisions.text, /Forge/);
+  assert.match(decisions.text, /Merge the life-dashboard real-data PR/);
+  assert.match(decisions.text, /Coach/);
+  assert.match(decisions.text, /Pick an eye exam time/);
+  assert.match(decisions.html, /href="\/decisions"/);
+  assert.match(decisions.text, /as of/i);
 });

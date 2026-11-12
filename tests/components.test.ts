@@ -63,7 +63,7 @@ function withAllFeeds<T>(data: DashboardData, mutate: (state: T) => void) {
   return copy as unknown as DashboardData;
 }
 
-test("a real feed with null data shows NO DATA and is not counted LIVE", () => {
+test("a real feed with null data hides those panels and is not counted LIVE", () => {
   const data = withAllFeeds<Record<string, unknown>>(fixture.data, (state) => {
     state.data = null;
     state.source = "real";
@@ -76,11 +76,22 @@ test("a real feed with null data shows NO DATA and is not counted LIVE", () => {
   const visible = feeds.filter((key) => key !== "health" && key !== "finance");
   assert.equal(feeds.length, 10, "fixture has ten feeds");
   assert.equal(visible.length, feeds.length - 2, "health and finance excluded");
-  assert.equal(
-    html.match(/>NO DATA</g)?.length,
-    visible.length + 2,
-    "eight section badges, the weather header badge, and one in the footer",
-  );
+  for (const id of [
+    "bots",
+    "money",
+    "health",
+    "schedule",
+    "reminders",
+    "github",
+    "goals",
+    "projects",
+    "systems",
+  ]) {
+    assert.ok(
+      !html.includes(`id="${id}-title"`),
+      `${id} panel should be hidden when its feed is null`,
+    );
+  }
   assert.ok(!html.includes(">LIVE"));
   assert.ok(!html.includes("LIVE / UNAVAILABLE"));
   assert.ok(!html.includes("NO DATA / UNAVAILABLE"));
@@ -134,7 +145,7 @@ test("a mixed dashboard counts each feed exactly once", () => {
   );
 });
 
-test("null feeds render 'No data' and empty-but-present lists keep their copy", () => {
+test("null feeds are hidden and empty-but-present lists keep their copy", () => {
   const nullData = withAllFeeds<Record<string, unknown>>(
     fixture.data,
     (state) => {
@@ -146,7 +157,8 @@ test("null feeds render 'No data' and empty-but-present lists keep their copy", 
   );
   const nullHtml = renderFixture(nullData, "day");
   const nullText = text(nullHtml);
-  assert.ok(nullHtml.includes('class="domain-empty">No data</div>'));
+  assert.ok(!nullHtml.includes('id="schedule-title"'));
+  assert.ok(!nullHtml.includes('id="reminders-title"'));
   assert.ok(!nullText.includes("No upcoming payments"));
   assert.ok(!nullText.includes("No work events ahead"));
   assert.ok(!nullText.includes("No personal events ahead"));

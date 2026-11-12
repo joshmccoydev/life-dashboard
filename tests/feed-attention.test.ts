@@ -28,7 +28,7 @@ const T = Date.parse("2026-10-03T04:00:00.000Z");
 const SECOND = 1000;
 const POLL_MS = 30 * SECOND;
 
-type FeedKey = keyof DashboardData;
+type FeedKey = Exclude<keyof DashboardData, "decisions">;
 
 /** Every feed ready with lastSuccess 1 s before `atMs`; `override` sets one feed's status. */
 function feedsAt(atMs: number, override?: { feed: FeedKey; status: DataState<unknown>["status"] }) {

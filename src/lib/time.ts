@@ -86,3 +86,21 @@ export function isStale(
     !lastSuccess || now.getTime() - Date.parse(lastSuccess) > refreshMs * 2
   );
 }
+
+/** Absolute as-of timestamp in America/Chicago, labeled CT. */
+export function asOfLabel(
+  value: string | null,
+  timezone = "America/Chicago",
+): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const formatted = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+  return `as of ${formatted} CT`;
+}

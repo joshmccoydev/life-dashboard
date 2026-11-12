@@ -89,7 +89,7 @@ export type BuildState = {
 };
 export type AIProvider = {
   name: string;
-  status: "running" | "idle" | "offline" | "unknown";
+  status: "running" | "idle" | "offline" | "unknown" | "waiting";
   remainingPercent: number | null;
   value?: string;
   availableCount?: number;
@@ -147,6 +147,20 @@ export type HabitState = {
   }[];
   date: string;
 };
+
+export type DecisionHomeCard = {
+  id?: string;
+  bot: string;
+  question: string;
+  rec?: string;
+  blocking?: boolean;
+  source?: string;
+};
+export type DecisionsHomeState = {
+  generatedAt?: string;
+  count: number;
+  cards: DecisionHomeCard[];
+};
 export type HomeState = {
   sensors: { name: string; value: number | string; unit: string }[];
 };
@@ -161,8 +175,9 @@ export type DashboardData = {
   systems: DataState<SystemState>;
   habits: DataState<HabitState>;
   goals: DataState<GoalState>;
+  decisions?: DataState<DecisionsHomeState>;
 };
-export type Domain = keyof DashboardData;
+export type Domain = Exclude<keyof DashboardData, "decisions">;
 export type Mode = "morning" | "day" | "evening" | "night";
 export type DisplayConfig = {
   timezone: string;

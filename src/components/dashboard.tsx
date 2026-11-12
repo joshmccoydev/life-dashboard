@@ -21,16 +21,19 @@ import type {
   DashboardData,
   DataState,
   DisplayConfig,
+  DecisionsHomeState,
   HealthState,
   Mode,
 } from "@/domains/models";
 import {
   ageLabel,
+  asOfLabel,
   dayKeyOffset,
   isStale,
   localDateKey,
   modeAt,
 } from "@/lib/time";
+import { stripPrivate } from "@/lib/privacy";
 import { evaluateAlerts, attentionView } from "@/lib/alerts";
 import { useDashboardData } from "@/lib/use-dashboard-data";
 import { normalizeDashboardResponse } from "@/lib/dashboard-response";
@@ -56,6 +59,86 @@ type ExtendedHealthState = HealthState & {
   week?: { steps?: number; goal?: number; activeDays?: number };
   streak?: { days?: number; label?: string };
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isLive(state: { source: string; data: unknown } | undefined): boolean {
+  return Boolean(state && state.source !== "mock" && state.data !== null);
+}
+
+type FinanceSummary = {
+  cashOnHand: number | null;
+  billsDueTotal: number | null;
+  billsDueCount: number;
+  depositTarget: number | null;
+  status: "ok" | "alert" | "unknown";
+};
+
+function isFinanceSummary(data: unknown): data is FinanceSummary {
+  return isRecord(data) && "cashOnHand" in data;
+}
+
+function isLegacyFinance(data: unknown): boolean {
+  return (
+    isRecord(data) &&
+    typeof data.checking === "number" &&
+    !("cashOnHand" in data)
+  );
+}
+
+function showMoney(data: DashboardData): boolean {
+  return (
+    isLive(data.finance) &&
+    (isFinanceSummary(data.finance.data) || isLegacyFinance(data.finance.data))
+  );
+}
+
+type HealthSummary = {
+  trainingDoneToday?: "y" | "n" | null;
+  streak?: number | null;
+  nextSession?: string | null;
+  lastWeighIn?: string | number | null;
+};
+
+function isHealthSummary(data: unknown): data is HealthSummary {
+  return (
+    isRecord(data) &&
+    ("nextSession" in data ||
+      "trainingDoneToday" in data ||
+      "lastWeighIn" in data) &&
+    !("steps" in data)
+  );
+}
+
+function showHealth(data: DashboardData): boolean {
+  if (!isLive(data.health)) return false;
+  const health: unknown = data.health.data;
+  if (isHealthSummary(health)) {
+    return Boolean(
+      health.nextSession ||
+        health.trainingDoneToday === "y" ||
+        health.trainingDoneToday === "n" ||
+        (typeof health.streak === "number" && health.streak > 0) ||
+        health.lastWeighIn != null,
+    );
+  }
+  if (!isRecord(health)) return false;
+  const streak = health.streak;
+  return (
+    typeof health.steps === "number" ||
+    typeof health.exerciseMinutes === "number" ||
+    Boolean(health.workout) ||
+    (isRecord(streak) && typeof streak.days === "number")
+  );
+}
+
+function showDecisions(data: DashboardData): boolean {
+  const cards = data.decisions?.data?.cards;
+  return Boolean(isLive(data.decisions) && Array.isArray(cards) && cards.length);
+}
+
 
 function DashboardCard({
   id,
@@ -93,6 +176,11 @@ function DashboardCard({
         </div>
         <div className="dashboard-panel-meta">
           <span>Updated {ageLabel(source.lastSuccess, now)}</span>
+          {source.lastSuccess ? (
+            <span className="dashboard-as-of">
+              {asOfLabel(source.lastSuccess)}
+            </span>
+          ) : null}
           {empty ? (
             <strong className="dashboard-panel-status">No data</strong>
           ) : stale ? (
@@ -143,10 +231,10 @@ function BotsPanel({ data, now }: { data: DashboardData; now: Date }) {
                 key={provider.name}
               >
                 <div>
-                  <strong>{provider.name}</strong>
-                  <p>{provider.detail || "No recent action"}</p>
+                  <strong>{stripPrivate(provider.name)}</strong>
+                  <p>{stripPrivate(provider.detail || "No recent action")}</p>
                 </div>
-                <span>{provider.value || provider.status}</span>
+                <span>{stripPrivate(String(provider.value || provider.status))}</span>
               </div>
             );
           })}
@@ -317,7 +405,50 @@ function HealthPanel({
   display: DisplayConfig;
   now: Date;
 }) {
-  const health = data.health.data as ExtendedHealthState | null;
+  const raw = data.health.data;
+  if (isHealthSummary(raw)) {
+    return (
+      <DashboardCard
+        id="health"
+        title="Health"
+        icon={HeartPulse}
+        source={data.health}
+        now={now}
+        className="dashboard-card-health"
+      >
+        <div className="dashboard-health-grid">
+          {raw.nextSession ? (
+            <div>
+              <span>Next</span>
+              <strong>{stripPrivate(raw.nextSession)}</strong>
+            </div>
+          ) : null}
+          {raw.trainingDoneToday === "y" || raw.trainingDoneToday === "n" ? (
+            <div>
+              <span>Training today</span>
+              <strong>{raw.trainingDoneToday === "y" ? "Done" : "Not yet"}</strong>
+            </div>
+          ) : null}
+          {typeof raw.streak === "number" && raw.streak > 0 ? (
+            <div>
+              <span>Streak</span>
+              <strong>
+                {raw.streak} {raw.streak === 1 ? "day" : "days"}
+              </strong>
+            </div>
+          ) : null}
+          {raw.lastWeighIn != null ? (
+            <div>
+              <span>Last weigh-in</span>
+              <strong>{stripPrivate(String(raw.lastWeighIn))}</strong>
+            </div>
+          ) : null}
+        </div>
+      </DashboardCard>
+    );
+  }
+
+  const health = raw as ExtendedHealthState | null;
   const healthStreak = habitStreak(data, now, display.timezone);
   const completedThisWeek = (data.habits.data?.habits ?? []).reduce(
     (total, habit) =>
@@ -353,16 +484,22 @@ function HealthPanel({
         <div className="domain-empty">No data</div>
       ) : (
         <div className="dashboard-health-grid">
-          <div>
-            <span>Today</span>
-            <strong>
-              {health.steps?.toLocaleString(display.locale) ?? "—"} steps
-            </strong>
-            <p>
-              {health.exerciseMinutes ?? 0} min exercise
-              {health.workout ? ` · ${health.workout}` : ""}
-            </p>
-          </div>
+          {typeof health.steps === "number" ? (
+            <div>
+              <span>Today</span>
+              <strong>
+                {health.steps.toLocaleString(display.locale)} steps
+              </strong>
+              {typeof health.exerciseMinutes === "number" || health.workout ? (
+                <p>
+                  {typeof health.exerciseMinutes === "number"
+                    ? `${health.exerciseMinutes} min exercise`
+                    : ""}
+                  {health.workout ? ` · ${health.workout}` : ""}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <div>
             <span>This week</span>
             <strong>{weekLabel}</strong>
@@ -376,7 +513,62 @@ function HealthPanel({
           </div>
         </div>
       )}
-      <Habits data={data} now={now} display={display} />
+      {isLive(data.habits) ? (
+        <Habits data={data} now={now} display={display} />
+      ) : null}
+    </DashboardCard>
+  );
+}
+
+function DecisionsPanel({
+  data,
+  now,
+}: {
+  data: DashboardData;
+  now: Date;
+}) {
+  const entry = data.decisions as
+    | { data: DecisionsHomeState | null }
+    | undefined;
+  const payload = entry?.data;
+  const cards = (payload?.cards ?? []).slice(0, 8);
+  const total = payload?.count ?? cards.length;
+  const source = data.decisions!;
+
+  return (
+    <DashboardCard
+      id="decisions"
+      title="Decisions"
+      icon={Bell}
+      source={source}
+      now={now}
+      className="dashboard-card-decisions"
+    >
+      <p className="dashboard-decisions-count">
+        {total} open {total === 1 ? "item" : "items"}
+      </p>
+      <div className="dashboard-decisions-list">
+        {cards.map((card, index) => (
+          <div
+            className={`dashboard-decision-row${card.blocking ? " waiting highlight attention" : ""}`}
+            key={card.id ?? `${card.bot}-${index}`}
+          >
+            <div>
+              <strong>{stripPrivate(card.bot)}</strong>
+              <p>{stripPrivate(card.question)}</p>
+            </div>
+            {card.blocking ? <span>blocking</span> : null}
+          </div>
+        ))}
+      </div>
+      <a className="dashboard-decisions-link" href="/decisions">
+        <span>
+          {total > cards.length
+            ? `Open all ${total} in the inbox`
+            : "Open the decisions inbox"}
+        </span>
+        <ArrowRight aria-hidden="true" />
+      </a>
     </DashboardCard>
   );
 }
@@ -671,16 +863,62 @@ function DashboardStyles() {
         border-top: 1px solid var(--color-border);
       }
 
-      .decisions-placeholder {
+      .dashboard-panel-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.25rem 0.75rem;
+        min-width: 0;
+      }
+
+      .dashboard-as-of {
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+
+      .dashboard-decisions-count {
+        margin: 0 0 var(--space-2);
+        color: var(--color-text-secondary);
+        font-size: var(--type-detail);
+      }
+
+      .dashboard-decisions-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        min-width: 0;
+      }
+
+      .dashboard-decision-row {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-3);
+        min-width: 0;
+      }
+
+      .dashboard-decision-row div {
+        min-width: 0;
+      }
+
+      .dashboard-decision-row p {
+        margin-top: var(--space-1);
+        color: var(--color-text-secondary);
+        font-size: var(--type-detail);
+        overflow-wrap: anywhere;
+      }
+
+      .dashboard-decisions-link {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: var(--space-3);
-        padding: var(--space-4);
-        border: 1px dashed var(--color-border-strong);
+        margin-top: var(--space-3);
+        padding: var(--space-3);
+        border: 1px solid var(--color-border);
         border-radius: 0.5rem;
-        color: var(--color-text-secondary);
+        color: inherit;
         text-decoration: none;
+        min-height: 44px;
       }
 
       @media (min-width: 640px) {
@@ -854,75 +1092,92 @@ function LiveDashboard({
           data-layout="single-column"
           data-breakpoint="640"
         >
-          <PanelBoundary name="Bots">
-            <BotsPanel data={data} now={clockNow} />
-          </PanelBoundary>
-          <PanelBoundary name="Money">
-            <MoneyPanel data={data} display={display} now={clockNow} />
-          </PanelBoundary>
-          <PanelBoundary name="Health">
-            <HealthPanel data={data} display={display} now={clockNow} />
-          </PanelBoundary>
-          <PanelBoundary name="Schedule">
-            <SchedulePanel data={data} display={display} now={clockNow} />
-          </PanelBoundary>
-          <PanelBoundary name="Reminders">
-            <RemindersPanel data={data} now={clockNow} />
-          </PanelBoundary>
-          <PanelBoundary name="GitHub">
-            <DashboardCard
-              id="github"
-              title="GitHub"
-              icon={Code2}
-              source={data.build}
-              now={clockNow}
-              className="dashboard-card-github"
-            >
-              <Build data={data} now={clockNow} />
-            </DashboardCard>
-          </PanelBoundary>
-          <PanelBoundary name="Goals">
-            <DashboardCard
-              id="goals"
-              title="Goals"
-              icon={Target}
-              source={data.goals}
-              now={clockNow}
-              className="dashboard-card-goals"
-            >
-              <Goals data={data} now={clockNow} />
-            </DashboardCard>
-          </PanelBoundary>
-          <PanelBoundary name="Projects">
-            <DashboardCard
-              id="projects"
-              title="Projects"
-              icon={Folder}
-              source={data.goals}
-              now={clockNow}
-              className="dashboard-card-projects"
-            >
-              <Projects data={data} now={clockNow} />
-            </DashboardCard>
-          </PanelBoundary>
-          <PanelBoundary name="Systems">
-            <DashboardCard
-              id="systems"
-              title="Systems"
-              icon={Server}
-              source={data.systems}
-              now={clockNow}
-              className="dashboard-card-systems"
-            >
-              <Systems data={data} now={clockNow} />
-            </DashboardCard>
-          </PanelBoundary>
-          <PanelBoundary name="Decisions">
-            <a className="decisions-placeholder" href="/decisions">
-              <span>Decisions coming from feat/decisions</span>
-              <ArrowRight aria-hidden="true" />
-            </a>
-          </PanelBoundary>
+          {isLive(data.ai) ? (
+            <PanelBoundary name="Bots">
+              <BotsPanel data={data} now={clockNow} />
+            </PanelBoundary>
+          ) : null}
+          {showMoney(data) ? (
+            <PanelBoundary name="Money">
+              <MoneyPanel data={data} display={display} now={clockNow} />
+            </PanelBoundary>
+          ) : null}
+          {showHealth(data) ? (
+            <PanelBoundary name="Health">
+              <HealthPanel data={data} display={display} now={clockNow} />
+            </PanelBoundary>
+          ) : null}
+          {isLive(data.calendar) ? (
+            <PanelBoundary name="Schedule">
+              <SchedulePanel data={data} display={display} now={clockNow} />
+            </PanelBoundary>
+          ) : null}
+          {isLive(data.reminders) ? (
+            <PanelBoundary name="Reminders">
+              <RemindersPanel data={data} now={clockNow} />
+            </PanelBoundary>
+          ) : null}
+          {isLive(data.build) ? (
+            <PanelBoundary name="GitHub">
+              <DashboardCard
+                id="github"
+                title="GitHub"
+                icon={Code2}
+                source={data.build}
+                now={clockNow}
+                className="dashboard-card-github"
+              >
+                <Build data={data} now={clockNow} />
+              </DashboardCard>
+            </PanelBoundary>
+          ) : null}
+          {isLive(data.goals) && (data.goals.data?.goals?.length ?? 0) > 0 ? (
+            <PanelBoundary name="Goals">
+              <DashboardCard
+                id="goals"
+                title="Goals"
+                icon={Target}
+                source={data.goals}
+                now={clockNow}
+                className="dashboard-card-goals"
+              >
+                <Goals data={data} now={clockNow} />
+              </DashboardCard>
+            </PanelBoundary>
+          ) : null}
+          {isLive(data.goals) && (data.goals.data?.projects?.length ?? 0) > 0 ? (
+            <PanelBoundary name="Projects">
+              <DashboardCard
+                id="projects"
+                title="Projects"
+                icon={Folder}
+                source={data.goals}
+                now={clockNow}
+                className="dashboard-card-projects"
+              >
+                <Projects data={data} now={clockNow} />
+              </DashboardCard>
+            </PanelBoundary>
+          ) : null}
+          {isLive(data.systems) ? (
+            <PanelBoundary name="Systems">
+              <DashboardCard
+                id="systems"
+                title="Systems"
+                icon={Server}
+                source={data.systems}
+                now={clockNow}
+                className="dashboard-card-systems"
+              >
+                <Systems data={data} now={clockNow} />
+              </DashboardCard>
+            </PanelBoundary>
+          ) : null}
+          {showDecisions(data) ? (
+            <PanelBoundary name="Decisions">
+              <DecisionsPanel data={data} now={clockNow} />
+            </PanelBoundary>
+          ) : null}
         </div>
       </SystemHistoryContext.Provider>
       <footer className="footer">
