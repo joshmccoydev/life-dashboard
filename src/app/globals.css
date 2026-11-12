@@ -1017,9 +1017,10 @@ body main.dashboard {
 @media (min-width: 1024px) {
   body main.dashboard {
     max-width: min(1680px, calc(100svh * 16 / 9));
-    height: 100svh;
-    min-height: 0;
-    overflow: hidden;
+    height: auto;
+    min-height: 100svh;
+    overflow-x: hidden;
+    overflow-y: visible;
   }
 
   .header {
