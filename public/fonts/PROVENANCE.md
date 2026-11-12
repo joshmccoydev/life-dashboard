@@ -53,3 +53,11 @@ Albert Sans with this documented provenance or switching the display font.
 
 The `albert-sans-OFL.txt` header year must match the font's embedded copyright
 year; both say 2021.
+
+## Shared Dracula UI fonts
+
+The dashboard UI now loads the Inter and JetBrains Mono Latin WOFF2 files
+supplied in `/workspace/cto/evidence/AGENTS-DRACULA/fonts-src/`. Their SIL Open
+Font License 1.1 texts are shipped as `OFL-Inter.txt` and
+`OFL-JetBrainsMono.txt`. The Albert Sans files above remain in the repository
+for provenance but are no longer loaded by the app.

@@ -1,247 +1,170 @@
-/* LifeDash display system: calibrated for a 16:9 screen viewed at a distance. */
+/* j0sh.wtf design tokens — Dash v3.1 + AAA lifts.
+   Source of truth after the 11:59 Codex pass: Canvas Dash v3.1 tokens.css
+   (Geist + Geist Mono + Instrument Serif, Grok = purple, Hermes = cyan, dark only)
+   plus the AAA body/meta lifts from HUB-SPEC-canvas.md §2.1.
+   Official Dracula swatches are used as written. Do not recolor them.
+   For 11–14px text on #282a36 or #21222c: use --muted-aaa, --accent-aaa / --grok-aaa,
+   --needs-josh-aaa, --critical-aaa. Do not use official purple, pink, or red, or the
+   AA --muted (#8893c9), as body/meta on those surfaces.
+*/
+
+/* j0sh.wtf design tokens — Dracula theme.
+   Palette: Dracula Theme, MIT License
+   https://github.com/dracula/dracula-theme
+   Copyright (c) Dracula Theme / Zeno Rocha.
+   Official swatches are used as written. Two darker surface steps
+   (#21222c, #191a21) are the common Dracula “background darker”
+   shades used around the official #282a36 background.
+   --muted lifts official comment #6272a4 (3.03:1 on #282a36, large-text
+   only) to #8893c9 so 11px meta text meets WCAG AA (4.79:1 on #282a36,
+   5.31:1 on #21222c, 5.83:1 on #191a21). The raw comment swatch is
+   kept as --idle for status dots, always paired with a text label.
+   Contrast notes are against the surface the token is drawn on.
+   All text/icon pairs used in the UI meet WCAG AA (4.5:1).
+   Never put --text (#f8f8f2) on a Dracula accent fill; use --bg-darker.
+*/
+
 :root {
   color-scheme: dark;
 
-  /* Day palette: calm blue-green on OLED black, with state colors reserved for state. */
-  --color-canvas: #080b0d;
-  --color-surface: #0c1013;
-  --color-surface-raised: #11171b;
-  --color-surface-emphasis: #151e22;
-  --color-text: #f2f5f3;
-  --color-text-secondary: #bec9c8;
-  --color-text-muted: #8e9d9d;
-  --color-border: #263235;
-  --color-border-strong: #344448;
-  --color-accent: #8fc9be;
-  --color-accent-soft: #203631;
-  --color-state-good: #8fc5a2;
-  --color-state-caution: #e0b776;
-  --color-state-critical: #df8984;
+  --dracula-bg: #282a36;
+  --dracula-current: #44475a;
+  --dracula-fg: #f8f8f2;
+  --dracula-comment: #6272a4;
+  --dracula-cyan: #8be9fd;
+  --dracula-green: #50fa7b;
+  --dracula-orange: #ffb86c;
+  --dracula-pink: #ff79c6;
+  --dracula-purple: #bd93f9;
+  --dracula-red: #ff5555;
+  --dracula-yellow: #f1fa8c;
+  --dracula-bg-dark: #21222c;
+  --dracula-bg-darker: #191a21;
 
-  /* Keep legacy selectors on the same palette while the stylesheet is migrated. */
-  --bg: var(--color-canvas);
-  --panel: var(--color-surface);
-  --text: var(--color-text);
-  --secondary: var(--color-text-secondary);
-  --muted: var(--color-text-muted);
-  --line: var(--color-border);
-  --blue: var(--color-accent);
-  --green: var(--color-state-good);
-  --amber: var(--color-state-caution);
-  --red: var(--color-state-critical);
+  --bg: #191a21;             /* page. --text on this: 16.27:1 */
+  --bg-2: #21222c;           /* drawer, inset. --text: 14.81:1 */
+  --elev: #282a36;           /* official bg, used as card surface. --text: 13.36:1 */
+  --elev-2: #323445;         /* raised card, board cards. --text: 11.50:1 */
+  --stroke: #44475a;         /* official current line */
+  --stroke-strong: #6272a4;  /* official comment, hairline only */
+  --text: #f8f8f2;           /* official fg */
+  --text-2: #e6e6d8;         /* secondary copy. 11.31:1 on --elev */
+  --muted: #8893c9;          /* AA-safe comment lift. 4.79:1 on --elev, 5.83:1 on --bg */
+  --accent: #bd93f9;         /* purple. 5.90:1 on --elev, 7.19:1 on --bg. Not on --stroke as 11px text (3.79:1). */
+  --cyan: #8be9fd;           /* 10.29:1 on --elev */
+  --yellow: #f1fa8c;         /* 12.74:1 on --elev */
+  --working: #50fa7b;        /* 10.38:1 on --elev */
+  --idle: #6272a4;           /* official comment; dots only, with a text label */
+  --blocked: #ffb86c;        /* 8.36:1 on --elev */
+  --needs-josh: #ff79c6;     /* pink. 5.97:1 on --elev, 7.27:1 on --bg. Not on --stroke as 11px text. */
+  --good: #50fa7b;
+  --caution: #ffb86c;
+  --critical: #ff5555;       /* 4.53:1 on --elev, 5.52:1 on --bg. Not on --stroke (2.91:1). */
+  --critical-deep: #2b1518;  /* --critical on this is well over AA; --text is not used here */
+  --critical-glow: rgba(255, 85, 85, 0.38);
+  --grok: #bd93f9;
+  --hermes: #8be9fd;
+  --window: #f1fa8c;
+  --lamp: #ffb86c;
+  --on-accent: #191a21;      /* text on green/yellow/cyan/orange/pink/purple fills. All ≥5.5:1. */
 
-  --font-ui: var(--font-display), "Avenir Next", "Segoe UI", sans-serif;
-  --font-mono: "SFMono-Regular", "Cascadia Code", "Liberation Mono", monospace;
-  /* Every tier keeps a >=20px floor at 1920x1080 and scales with viewport
-     width, so the 4K layout is exactly 2x the 1080p layout. The svh term is
-     written as an exact `calc(100svh * N / D)` fraction: Lightning CSS rounds
-     decimal svh constants to 6 significant digits, which made the Turbopack
-     and webpack builds render slightly different text. */
-  --type-tier-1: clamp(3rem, min(3.6vw, calc(100svh * 8 / 125)), 6rem);
-  --type-tier-2: clamp(1.6rem, min(1.8vw, calc(100svh * 4 / 125)), 2.6rem);
-  --type-tier-3: clamp(1.4rem, min(1.5vw, calc(100svh * 2 / 75)), 2.2rem);
-  --type-detail: clamp(1rem, min(1.2vw, calc(100svh * 8 / 375)), 1.7rem);
-  --type-micro: clamp(1rem, min(1.05vw, calc(100svh * 7 / 375)), 1.5rem);
+  --font-sans: "Geist", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Geist Mono", "SFMono-Regular", ui-monospace, monospace;
+  --font-serif: "Instrument Serif", "Times New Roman", serif;
 
-  --overscan-inline: 3.25%;
-  --overscan-block: 1.4%;
-  --space-1: clamp(0.2rem, min(0.25vw, calc(100svh * 1 / 225)), 0.5rem);
-  --space-2: clamp(0.4rem, min(0.5vw, calc(100svh * 2 / 225)), 0.9rem);
-  --space-3: clamp(0.6rem, min(0.7vw, calc(100svh * 14 / 1125)), 1.2rem);
-  --space-4: clamp(0.9rem, min(1vw, calc(100svh * 4 / 225)), 1.7rem);
-  --space-5: clamp(1.3rem, min(1.5vw, calc(100svh * 2 / 75)), 2.4rem);
-  --space-6: clamp(1.8rem, min(2.2vw, calc(100svh * 44 / 1125)), 3.4rem);
-
-  --auto-dim-idle: 0.72;
-  --auto-dim-night: 0.62;
-  --display-luminance-day: 1;
-  --display-luminance-night: 0.35;
-
-  font-family: var(--font-ui);
-  font-synthesis: none;
-  /* Scale from the 16:9 canvas, not a pillarboxed viewport's outer width. */
-  /* Parity note: Lightning CSS folds this calc to `1.86667svh` (rounded UP from
-     1.866666...). At 16:9 the `1.05vw` term must win min(), and it only does so
-     because that rounding goes up; a minifier that rounded down would let the
-     svh term win by a sub-pixel amount. Tests pin the fraction itself. */
-  font-size: clamp(20px, min(1.05vw, calc(100svh * 7 / 375)), 42px);
-  font-variant-numeric: tabular-nums lining-nums;
-  background: var(--color-canvas);
-  color: var(--color-text);
+  --t-hero: 92px;
+  --t-display: 40px;
+  --t-title: 13px;
+  --t-body: 14px;
+  --t-meta: 11px;
+  --tap: 44px;
+  --pad: 24px;
+  --gap: 16px;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --space: 8px;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur: 200ms;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-  }
+@media (min-width: 1300px) {
+  :root { --t-hero: 108px; --t-display: 48px; --pad: 28px; --gap: 16px; }
+}
+@media (max-width: 900px) {
+  :root { --t-hero: 72px; --t-display: 36px; --pad: 16px; --gap: 12px; --radius: 12px; }
 }
 
-main.dashboard {
-  container: dashboard / inline-size;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: var(--space-2);
-  width: 100%;
-  /* 16:9 canvas that is always bounded by the viewport height. */
-  max-width: calc(100svh * 16 / 9);
-  height: 100svh;
-  margin-inline: auto;
-  padding: var(--overscan-block) var(--overscan-inline);
-  overflow: hidden;
-  background: var(--color-canvas);
+@font-face {
+  font-family: "Geist";
+  src: url("/fonts/geist-latin-var.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/geist-mono-latin-var.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("/fonts/instrument-serif-latin-regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("/fonts/instrument-serif-latin-italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
 }
 
-.domain-columns {
-  gap: var(--space-3);
-}
+:root {
+  /* AAA lifts (HUB-SPEC §2.1). Official swatches stay above. */
+  --muted-aaa: #adb5da;          /* 11–14px meta. 7.05:1 on --elev */
+  --accent-aaa: #c9a7fa;         /* body-size accent/Grok on cards */
+  --grok-aaa: #c9a7fa;           /* same lift */
+  --needs-josh-aaa: #ff93d1;     /* body-size needs-Josh on cards */
+  --critical-aaa: #ff9a9a;       /* body-size alert text */
+  --critical-fill-aaa: #ff7d7d;  /* red fill that can hold --on-accent at 7.00:1 */
 
-.domain-column {
-  background: var(--color-surface);
-  border-color: var(--color-border);
-  border-radius: 0.75rem;
-}
-
-.domain-column-header {
-  min-height: 0;
-  padding: var(--space-2) var(--space-3);
-}
-
-.domain-column-header > svg,
-.domain-column-header h2 {
-  color: var(--color-accent);
-}
-
-.domain-column-header h2 {
-  font-size: var(--type-tier-3);
-  letter-spacing: -0.025em;
-}
-
-.domain-column-header span,
-.domain-section-header h3,
-.domain-inline-label > span:first-child {
-  font-size: var(--type-micro);
-  letter-spacing: 0.035em;
-}
-
-.domain-section {
-  padding: var(--space-2) var(--space-3);
-}
-
-.domain-next-event > strong {
-  color: var(--color-text);
-  font-size: var(--type-tier-2);
-}
-
-.domain-next-event > strong small {
-  font-size: var(--type-micro);
-}
-
-.domain-next-event h4 {
-  color: var(--color-text);
-  font-size: var(--type-tier-3);
-}
-
-.domain-next-event span,
-.domain-list-row,
-.domain-status-row,
-.domain-habit-row,
-.domain-empty,
-.domain-section-summary,
-.domain-project-detail,
-.domain-project .domain-list-row > span,
-.domain-project p,
-.domain-feature-row {
-  font-size: var(--type-detail);
-}
-
-.domain-list-row strong,
-.domain-status-row strong,
-.domain-habit-row strong,
-.domain-provider-value strong,
-.domain-provider-value small,
-.domain-feature-row strong {
-  font-size: var(--type-micro);
-}
-
-.domain-habit-days > div {
-  grid-template-columns: repeat(7, 1.05em);
-  gap: 0.3em;
-}
-
-.domain-habit-days i {
-  font-size: var(--type-micro);
-}
-
-.domain-habit-row .habit-week i {
-  width: 0.58rem;
-  height: 0.58rem;
-}
-
-.domain-metrics strong {
-  color: var(--color-text);
-  font-size: var(--type-tier-3);
-}
-
-.domain-metrics.compact strong {
-  font-size: var(--type-tier-3);
-}
-
-.domain-metrics span {
-  font-size: var(--type-micro);
-}
-
-.domain-project {
-  border-color: var(--color-border);
-}
-
-.domain-provider-list .domain-list-row,
-.domain-status-list .domain-status-row {
-  border-color: var(--color-border);
-}
-
-.domain-home .domain-list-row strong {
-  color: var(--color-text-secondary);
-}
-
-.mode-morning .personal-column,
-.mode-evening .personal-column,
-.mode-day .work-column {
-  border-color: var(--color-accent);
-}
-
-.mode-night {
-  --color-canvas: #050607;
-  --color-surface: #080a0b;
-  --color-surface-raised: #0b0e10;
-  --color-surface-emphasis: #101416;
-  --color-text: #c2c9c8;
-  --color-text-secondary: #a1acab;
-  --color-text-muted: #858f8e;
-  --color-border: #1d2425;
-  --color-border-strong: #283132;
-  --color-accent: #789b94;
-  --color-accent-soft: #192421;
-  --color-state-good: #78977f;
-  --color-state-caution: #a58a61;
-  --color-state-critical: #a46d69;
-  --bg: var(--color-canvas);
-  --panel: var(--color-surface);
-  --text: var(--color-text);
-  --secondary: var(--color-text-secondary);
-  --muted: var(--color-text-muted);
-  --line: var(--color-border);
-  --blue: var(--color-accent);
-  --green: var(--color-state-good);
-  --amber: var(--color-state-caution);
-  --red: var(--color-state-critical);
-  filter: brightness(var(--display-luminance-night));
-}
-
-@media (max-aspect-ratio: 4 / 3) {
-  main.dashboard {
-    max-width: none;
-    height: auto;
-    min-height: 100svh;
-    overflow: visible;
-  }
+  /* Compat aliases for the 11:59 Inter/JetBrains Codex pass. var() only, no new hex.
+     Grok = purple, Hermes = cyan (this FLIPS the old --side-grok cyan / --side-hermes purple). */
+  --fg: var(--text);
+  --fg-muted: var(--muted-aaa);
+  --surface: var(--elev);
+  --surface-hover: var(--elev-2);
+  --comment: var(--idle);
+  --font-ui: var(--font-sans);
+  --side-grok: var(--grok);
+  --side-grok-text: var(--grok-aaa);
+  --side-hermes: var(--hermes);
+  --side-hermes-text: var(--hermes);
+  --need-blocking: var(--critical-aaa);
+  --need-blocking-text: var(--critical-aaa);
+  --need-action: var(--blocked);
+  --need-action-text: var(--blocked);
+  --need-waiting: var(--yellow);
+  --need-waiting-text: var(--yellow);
+  --need-clear: var(--working);
+  --need-clear-text: var(--working);
+  --accent-active: var(--needs-josh);
+  --accent-active-text: var(--needs-josh-aaa);
+  --focus-ring: 2px solid var(--accent);
+  --hairline: 1px solid var(--stroke);
+  --border-strong: 1px solid var(--stroke-strong);
+  --text-meta: var(--t-meta);
+  --text-body: var(--t-body);
+  --text-title: var(--t-title);
+  --r-sm: var(--radius-sm);
+  --r: var(--radius);
+  --r-lg: var(--radius);
+  --r-pill: 999px;
+  --dur-fast: 150ms;
+  --dur-slow: 280ms;
+  --ease-out: var(--ease);
 }

@@ -4,8 +4,8 @@
   "start_url": "/decisions",
   "scope": "/decisions",
   "display": "standalone",
-  "background_color": "#0b0b0c",
-  "theme_color": "#0b0b0c",
+  "background_color": "rgb(40, 42, 54)",
+  "theme_color": "rgb(40, 42, 54)",
   "icons": [
     {
       "src": "/favicon.svg",

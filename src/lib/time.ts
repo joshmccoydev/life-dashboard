@@ -80,10 +80,10 @@ export function ageLabel(value: string | null, now: Date) {
 export function isStale(
   lastSuccess: string | null,
   now: Date,
-  refreshMs: number,
+  _refreshMs: number,
 ) {
   return (
-    !lastSuccess || now.getTime() - Date.parse(lastSuccess) > refreshMs * 2
+    !lastSuccess || now.getTime() - Date.parse(lastSuccess) > 24 * 60 * 60 * 1000
   );
 }
 

@@ -5,6 +5,14 @@ body {
   min-height: 100%;
 }
 
+.clock,
+.dashboard-panel-meta,
+.dashboard-usage-pct,
+.dashboard-usage-asof,
+.feed-summary {
+  font-family: var(--font-mono);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -1000,11 +1008,59 @@ body main.dashboard {
   max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
+  flex-wrap: wrap;
+  padding-inline: var(--s4);
+  border-bottom: var(--hairline);
 }
 
 .dashboard-tab {
   flex: 0 0 auto;
   min-height: 44px;
+  min-width: 44px;
+  border-radius: var(--r-sm);
+  color: var(--fg-muted);
+}
+
+.dashboard-tab:hover { background: var(--surface-hover); color: var(--fg); }
+
+.dashboard-tab[aria-current="page"] {
+  border-color: var(--comment);
+  background: color-mix(in srgb, var(--accent-active) 14%, var(--surface));
+  color: var(--accent-active-text);
+}
+
+.dashboard-topbar { border-bottom: var(--hairline); }
+
+.dashboard-card { border-color: var(--comment); border-radius: var(--r); }
+
+.dashboard-reminder-group { display: grid; gap: var(--s2); }
+.dashboard-reminder-group h3 {
+  color: var(--fg-muted);
+  font: 500 var(--text-chip)/1.3 var(--font-ui);
+}
+
+@media (max-width: 480px) {
+  body main.dashboard { padding: var(--s3); }
+  .header { gap: var(--s2); }
+  .header-right { gap: var(--s2); }
+  .dashboard-tabs { gap: var(--s1); padding-inline: 0; }
+  .dashboard-tab { padding-inline: var(--s3); }
+  .dashboard-usage-grid { grid-template-columns: 1fr; }
+  .dashboard-schedule-grid,
+  .dashboard-health-grid,
+  .dashboard-money-grid { grid-template-columns: 1fr; }
+  .dashboard-panel-heading h2 { white-space: normal; overflow-wrap: anywhere; }
+}
+
+@media (min-width: 481px) and (max-width: 1023px) {
+  .dashboard-usage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-schedule-grid,
+  .dashboard-health-grid,
+  .dashboard-money-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard * { scroll-behavior: auto !important; }
 }
 
 @media (max-height: 800px) and (min-width: 1101px) {
@@ -1015,6 +1071,8 @@ body main.dashboard {
 }
 
 @media (min-width: 1024px) {
+  .dashboard-tabs { flex-wrap: nowrap; }
+
   body main.dashboard {
     max-width: min(1680px, calc(100svh * 16 / 9));
     height: auto;

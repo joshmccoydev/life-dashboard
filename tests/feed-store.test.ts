@@ -9,13 +9,16 @@ const DOMAINS = [
   "host",
   "apple",
   "decisions",
+  "usage",
+  "weather",
+  "build",
 ] as const;
 const NOW = new Date("2026-11-01T16:30:00.000Z");
 const RECENT = "2026-11-01T16:20:00.000Z";
 const OLDER_THAN_THIRTY_MINUTES = "2026-11-01T15:59:59.999Z";
-const EXACTLY_TWO_HOURS_OLD = "2026-11-01T14:30:00.000Z";
-const NINETY_MINUTES_OLD = "2026-11-01T15:00:00.000Z";
-const OLDER_THAN_TWO_HOURS = "2026-11-01T14:29:59.999Z";
+const EXACTLY_TWENTY_FOUR_HOURS_OLD = "2026-10-31T16:30:00.000Z";
+const TWENTY_THREE_HOURS_OLD = "2026-10-31T17:30:00.000Z";
+const OLDER_THAN_TWENTY_FOUR_HOURS = "2026-10-31T16:29:59.999Z";
 
 type Domain = (typeof DOMAINS)[number];
 type Source = "box" | "mac";
@@ -54,18 +57,18 @@ test("merges valid incoming entries for every supported domain", () => {
   }
 });
 
-test("marks only entries older than two hours as stale", () => {
-  const atBoundary = feeds("boundary", EXACTLY_TWO_HOURS_OLD);
-  const ninetyMinutesOld = feeds("ninety-minutes-old", NINETY_MINUTES_OLD);
-  const older = feeds("older", OLDER_THAN_TWO_HOURS);
+test("marks only entries older than 24 hours as stale", () => {
+  const atBoundary = feeds("boundary", EXACTLY_TWENTY_FOUR_HOURS_OLD);
+  const twentyThreeHoursOld = feeds("twenty-three-hours-old", TWENTY_THREE_HOURS_OLD);
+  const older = feeds("older", OLDER_THAN_TWENTY_FOUR_HOURS);
 
   const boundaryResult = mergeFeeds(null, atBoundary, NOW);
-  const ninetyMinutesOldResult = mergeFeeds(null, ninetyMinutesOld, NOW);
+  const twentyThreeHoursOldResult = mergeFeeds(null, twentyThreeHoursOld, NOW);
   const olderResult = mergeFeeds(null, older, NOW);
 
   for (const domain of DOMAINS) {
     assert.equal(boundaryResult[domain].stale, false, domain);
-    assert.equal(ninetyMinutesOldResult[domain].stale, false, domain);
+    assert.equal(twentyThreeHoursOldResult[domain].stale, false, domain);
     assert.equal(olderResult[domain].stale, true, domain);
   }
 });

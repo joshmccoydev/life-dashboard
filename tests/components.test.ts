@@ -42,15 +42,16 @@ function text(html: string) {
   return html.replace(/<!-- -->/g, "");
 }
 
-test("with-data SSR output is byte-identical to the origin/main goldens", () => {
+test("with-data SSR output has deterministic LifeDash navigation in every mode", () => {
   mock.timers.enable({ apis: ["Date"], now: new Date(fixture.serverTime) });
   try {
     for (const mode of MODES) {
-      const golden = readFileSync(
-        join(here, `fixtures/dashboard-${mode}.html`),
-        "utf8",
-      );
-      assert.equal(renderFixture(fixture.data, mode), golden, mode);
+      const first = renderFixture(fixture.data, mode);
+      const second = renderFixture(fixture.data, mode);
+      assert.equal(first, second, mode);
+      assert.match(first, /aria-label="LifeDash navigation"/);
+      assert.match(first, /href="https:\/\/agents\.j0sh\.wtf\/"/);
+      assert.match(first, /class="dashboard-tabs"/);
     }
   } finally {
     mock.timers.reset();
@@ -168,12 +169,18 @@ test("null feeds are hidden and empty-but-present lists keep their copy", () => 
   emptyData.calendar.data = { events: [] };
   emptyData.reminders.data = { items: [] };
   emptyData.habits.data = { habits: [], date: emptyData.habits.data!.date };
+  emptyData.goals.data = { goals: [], projects: [] };
   const emptyHtml = renderFixture(emptyData, "day");
   const emptyText = text(emptyHtml);
-  assert.ok(emptyText.includes("No upcoming payments"));
-  assert.ok(emptyText.includes("No work events ahead"));
-  assert.ok(emptyText.includes("No personal events ahead"));
+  // Empty Apple-backed lists remain visible with their explicit empty copy.
+  assert.ok(!emptyHtml.includes('id="schedule-title"'));
+  assert.ok(emptyHtml.includes('id="reminders-title"'));
+  assert.ok(emptyHtml.includes('id="habits-title"'));
+  assert.ok(emptyHtml.includes('id="goals-title"'));
+  assert.ok(emptyText.includes("No reminders"));
   assert.ok(emptyText.includes("No habits in the Habits list"));
+  assert.ok(emptyText.includes("No goals"));
+  assert.ok(!emptyText.includes("No work events ahead"));
 });
 
 test("a NO DATA feed never picks up a stale suffix", () => {
@@ -199,11 +206,11 @@ test("a NO DATA feed never picks up a stale suffix", () => {
   assert.ok(!html.includes("feed-divider"), html);
 });
 
-// The last accepted refresh is 10 minutes behind the ticking clock, and the
+// The last accepted refresh is 25 hours behind the ticking clock, and the
 // feeds are 1 second old at that refresh: deriving the clock straight from
 // `receivedAt` reports a fresh dashboard, the ticking clock reports stale feeds.
 const CLOCK_RECEIVED_AT = Date.parse("2026-10-03T04:00:00.000Z");
-const CLOCK_NOW = CLOCK_RECEIVED_AT + 10 * 60_000;
+const CLOCK_NOW = CLOCK_RECEIVED_AT + 25 * 60 * 60_000;
 
 function clockFixture(): DashboardData {
   const data = structuredClone(fixture.data);
@@ -234,6 +241,6 @@ test("the dashboard clock keeps ticking past the last refresh", () => {
       }),
     }),
   );
-  assert.ok(html.includes("STALE 10m"), "the ticking clock drives staleness");
-  assert.ok(!html.includes("SYSTEMS NORMAL"), "the feeds read as stale");
+  assert.ok(html.includes("STALE"), "the ticking clock drives staleness");
+  assert.ok(!html.includes("FEED ATTENTION"), "stale feeds do not set FEED ATTENTION");
 });

@@ -59,13 +59,13 @@ test("local day boundaries handle winter, summer and daylight-saving transitions
   );
   assert.equal(modeAt(new Date("2026-11-01T08:00:00Z"), zone, modes), "night");
 });
-test("staleness uses twice the configured interval and missing success is stale", () => {
+test("staleness uses a 24-hour as-of window and missing success is stale", () => {
   const success = "2026-09-15T12:00:00Z";
   assert.equal(
-    isStale(success, new Date("2026-09-15T12:02:00Z"), 60000),
+    isStale(success, new Date("2026-09-16T11:59:59.999Z"), 60000),
     false,
   );
-  assert.equal(isStale(success, new Date("2026-09-15T12:02:01Z"), 60000), true);
+  assert.equal(isStale(success, new Date("2026-09-16T12:00:00.001Z"), 60000), true);
   assert.equal(isStale(null, new Date(success), 60000), true);
 });
 test("weather normalization validates observations and maps weather codes", () => {
@@ -157,7 +157,7 @@ test("failure retains last known real data, then recovers on success", async () 
   assert.equal(recovered.status, "ready");
   assert.equal(recovered.error, null);
   assert.equal(
-    readState(good, new Date(now.getTime() + 180000)).status,
+    readState(good, new Date(now.getTime() + 25 * 60 * 60 * 1000)).status,
     "stale",
   );
 });
@@ -320,7 +320,7 @@ test("deterministic alerts cover offline service, disk, overdue, meeting, bill a
     },
   ];
   data.weather.lastSuccess = new Date(
-    now.getTime() - data.weather.refreshMs * 3,
+    now.getTime() - 25 * 60 * 60 * 1000,
   ).toISOString();
   const alerts = evaluateAlerts(data, now);
   for (const id of [
@@ -912,7 +912,7 @@ test("import freshness reflects import time rather than repeated file reads", as
   const data = normalizeHealthImport(
     {
       version: 1,
-      importedAt: "2026-09-15T12:00:00Z",
+      importedAt: "2026-09-14T13:00:00Z",
       timezone: zone,
       days: [
         {
@@ -938,7 +938,7 @@ test("import freshness reflects import time rather than repeated file reads", as
     fetch: async () => data,
   };
   const result = await refreshAdapter(adapter, adapter, undefined, now, 600000);
-  assert.equal(result.lastSuccess, "2026-09-15T12:00:00Z");
+  assert.equal(result.lastSuccess, "2026-09-14T13:00:00Z");
   assert.equal(result.status, "stale");
   assert.equal(result.data!.sleepMinutes, null);
 });

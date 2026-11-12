@@ -16,6 +16,10 @@
       }
 
       .dashboard-tab {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
         padding: var(--space-2) var(--space-3);
         border: 1px solid transparent;
         border-radius: 0.4rem;
@@ -24,6 +28,7 @@
         cursor: pointer;
         font: inherit;
         font-size: var(--type-detail);
+        font-weight: 600;
         text-decoration: none;
       }
 
@@ -211,26 +216,61 @@
       .dashboard-decisions-list {
         display: flex;
         flex-direction: column;
-        gap: var(--space-2);
+        gap: 0;
         min-width: 0;
       }
 
       .dashboard-decision-row {
-        display: flex;
-        justify-content: space-between;
-        gap: var(--space-3);
+        display: grid;
+        grid-template-columns: 7.25rem minmax(0, 1fr);
+        align-items: center;
+        column-gap: 10px;
         min-width: 0;
+        min-height: 44px;
+        padding: 6px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
       }
 
-      .dashboard-decision-row div {
-        min-width: 0;
+      .dashboard-decision-row:last-child {
+        border-bottom: 0;
       }
 
-      .dashboard-decision-row p {
-        margin-top: var(--space-1);
-        color: var(--color-text-secondary);
-        font-size: var(--type-detail);
+      .dashboard-decision-bot {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        align-self: center;
+        justify-self: start;
+        box-sizing: border-box;
+        max-width: 100%;
+        padding: 1px 8px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--color-text-muted);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        line-height: 18px;
+        white-space: nowrap;
+      }
+
+      .dashboard-decision-q {
+        margin: 0;
+        min-width: 0;
+        color: var(--color-text);
+        font-size: 16px;
+        font-weight: 500;
+        line-height: 1.35;
         overflow-wrap: anywhere;
+      }
+
+      .dashboard-decision-block {
+        grid-column: 2;
+        color: var(--color-state-critical);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
       }
 
       .dashboard-decisions-link {
@@ -247,17 +287,623 @@
         min-height: 44px;
       }
 
-      @media (min-width: 640px) {
-        .dashboard-home {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
 
+      .dashboard-bots-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .dashboard-bots-table th {
+        text-align: left;
+        color: var(--color-text-muted);
+        font-size: var(--type-micro, 12px);
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 0 8px 8px;
+      }
+      .dashboard-bots-table td {
+        padding: 0 8px;
+        height: 48px;
+        border-top: 1px solid var(--color-border);
+        font-size: 15px;
+        vertical-align: middle;
+      }
+      .dashboard-bots-table td.name {
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .dashboard-bots-table td.run {
+        color: var(--color-text-secondary);
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+      }
+      .dashboard-bots-table td.status {
+        width: 128px;
+      }
+      .dashboard-bots-table tbody tr:hover {
+        background: var(--color-surface-raised);
+      }
+      .dashboard-bots-more {
+        display: flex;
+        align-items: center;
+        min-height: 44px;
+        margin: 8px 0 0;
+        color: var(--color-accent);
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .dashboard-bots-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        column-gap: 16px;
+        row-gap: 0;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .dashboard-bot-cell {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        align-items: center;
+        gap: 8px;
+        min-height: 28px;
+        padding: 2px 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        font-size: 13px;
+      }
+      .dashboard-bot-cell .name {
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .dashboard-bot-cell .run {
+        color: var(--color-text-secondary);
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+        font-size: 12px;
+      }
+      .dashboard-bot-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .dashboard-bot-dot.ask { background: var(--color-state-critical); }
+      .dashboard-bot-dot.working { background: var(--color-state-good); }
+      .dashboard-bot-dot.idle { background: var(--color-text-muted); }
+      .dashboard-bot-dot.blocked { background: var(--color-state-caution); }
+      .dashboard-bots-legend {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 14px;
+        list-style: none;
+        margin: 8px 0 0;
+        padding: 0;
+        color: var(--color-text-muted);
+        font-size: 11px;
+        line-height: 1;
+      }
+      .dashboard-bots-legend li {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+      }
+
+      .dash-tag {
+        display: inline-flex;
+        align-items: center;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 4px;
+        border: 1px solid var(--color-border-strong);
+        color: var(--color-text-muted);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+      .dash-tag.manual {
+        border-color: var(--color-text-muted);
+      }
+      .dash-tag.stale {
+        border-color: var(--color-state-caution);
+        color: var(--color-state-caution);
+        background: rgba(224, 183, 118, 0.12);
+      }
+      .dash-tag.alert {
+        border-color: var(--color-state-critical);
+        color: var(--color-state-critical);
+        background: rgba(223, 137, 132, 0.12);
+      }
+      .dash-tag.ok {
+        border-color: var(--color-state-good);
+        color: var(--color-state-good);
+      }
+      .dash-tag.idle,
+      .dash-tag.paused {
+        border-color: var(--color-border-strong);
+      }
+
+      .dashboard-usage-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .dashboard-usage-card {
+        background: var(--color-surface-raised);
+        border: 1px solid var(--color-border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        min-width: 0;
+      }
+      .dashboard-usage-card header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .dashboard-usage-card h3 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .dashboard-usage-bar {
+        height: 8px;
+        border-radius: 99px;
+        background: var(--color-surface-emphasis);
+        overflow: hidden;
+      }
+      .dashboard-usage-bar > i {
+        display: block;
+        height: 100%;
+        background: var(--color-accent);
+        border-radius: 99px;
+      }
+      .dashboard-usage-bar.high > i {
+        background: var(--color-state-caution);
+      }
+      .dashboard-usage-pct {
+        margin-top: 8px;
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        font-variant-numeric: tabular-nums;
+      }
+      .dashboard-usage-card p,
+      .dashboard-usage-plan,
+      .dashboard-usage-asof {
+        margin: 4px 0 0;
+        color: var(--color-text-muted);
+        font-size: 12px;
+        line-height: 1.35;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .dashboard-usage-pct.empty {
+        color: var(--color-text-muted);
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: lowercase;
+      }
+
+      .dashboard-decision-q {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      a:focus-visible,
+      button:focus-visible,
+      .dashboard-tab:focus-visible,
+      .dashboard-decisions-link:focus-visible,
+      .alert-chip:focus-visible {
+        outline: 2px solid #8fc9be;
+        outline-offset: 2px;
+      }
+
+      .dashboard-card {
+        height: fit-content;
+      }
+      .dashboard-home {
+        align-items: start;
+      }
+      .dashboard-card-money.alert {
+        border-color: var(--color-state-critical);
+        background: linear-gradient(
+          180deg,
+          rgba(223, 137, 132, 0.12),
+          var(--color-surface) 48px
+        );
+        box-shadow: inset 4px 0 0 var(--color-state-critical);
+        transition: box-shadow 160ms ease, border-color 160ms ease;
+      }
+      .alert-reason {
+        margin: 12px 0 0;
+        color: var(--color-state-critical);
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .dashboard-money-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 12px;
+      }
+      .dashboard-money-row strong.negative {
+        color: var(--color-state-critical);
+      }
+      .dashboard-money-row span {
+        display: block;
+        color: var(--color-text-muted);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .dashboard-money-row strong {
+        display: block;
+        margin-top: 4px;
+        font-size: var(--type-tier-2, 36px);
+        font-weight: 600;
+        line-height: 1.1;
+        font-variant-numeric: tabular-nums;
+      }
+      .dashboard-money-row p {
+        margin: 4px 0 0;
+        color: var(--color-text-secondary);
+        font-size: 12px;
+      }
+      .dashboard-bills {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 16px;
+      }
+      .dashboard-bills th {
+        text-align: left;
+        color: var(--color-text-muted);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 0 8px 8px;
+      }
+      .dashboard-bills td {
+        padding: 0 8px;
+        height: 48px;
+        border-top: 1px solid var(--color-border);
+        font-size: 15px;
+        vertical-align: middle;
+      }
+      .dashboard-bills td.name {
+        font-weight: 600;
+      }
+      .dashboard-bills th.due,
+      .dashboard-bills td.due {
+        text-align: left;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        color: var(--color-text-secondary);
+      }
+      .dashboard-bills th.amt,
+      .dashboard-bills td.amt {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        font-weight: 600;
+        color: var(--color-text);
+      }
+      .dashboard-bills tr.past-due td.due {
+        color: var(--color-state-critical);
+        font-weight: 600;
+      }
+      .dashboard-bills .due-dot {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--color-state-critical);
+        margin-right: 6px;
+        vertical-align: middle;
+      }
+      .dashboard-bills td.due.muted,
+      .dashboard-bills td.amt.muted {
+        color: var(--color-text-muted);
+        font-weight: 400;
+      }
+      .mode-label[hidden],
+      .mode-label {
+        display: none !important;
+      }
+      .alert-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 8px;
+        min-height: 44px;
+        padding: 0 12px;
+        border-radius: 999px;
+        background: rgba(223, 137, 132, 0.12);
+        border: 1px solid var(--color-state-critical);
+        color: var(--color-state-critical);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        text-decoration: none;
+      }
+      .dashboard-money-page {
+        grid-template-columns: 1fr;
+      }
+      main.dashboard:has(.dashboard-money-page) {
+        align-content: start;
+        grid-template-rows: auto auto auto auto;
+        height: auto;
+        min-height: 0;
+      }
+      .dashboard-money-page .dashboard-card-money {
+        grid-column: 1 / -1;
+        height: fit-content;
+      }
+
+      /* iPad type scale and 8px grid. Do not use TV vw/svh clamps here. */
+      @media (max-width: 1024px) {
+        main.dashboard {
+          --type-tier-1: 56px;
+          --type-tier-2: 36px;
+          --type-tier-3: 20px;
+          --type-detail: 15px;
+          --type-micro: 12px;
+          --space-1: 4px;
+          --space-2: 8px;
+          --space-3: 12px;
+          --space-4: 16px;
+          --space-5: 24px;
+          --space-6: 32px;
+          max-width: 1024px;
+          padding: 24px;
+          gap: 16px;
+          /* Tabs are a fourth row. Do not let the TV 3-row 1fr stretch them.
+             align-content:start keeps auto rows from growing when the page
+             (Money) is shorter than 100svh. */
+          grid-template-rows: auto auto auto auto;
+          height: auto;
+          min-height: 0;
+          align-content: start;
+          overflow: visible;
+        }
+        .dashboard-tabs {
+          display: flex;
+          align-items: center;
+          align-self: start;
+          height: fit-content;
+        }
+        .dashboard-tab {
+          align-self: center;
+          height: 44px;
+        }
+        /* Identity (wordmark + money alert chip) is hidden below 1024 in
+           globals.css. Keep the chip visible on iPad 820 and phone. */
+        .identity {
+          display: block;
+          min-width: 0;
+        }
+        .dashboard-home {
+          gap: 16px;
+          padding: 0;
+        }
+        .dashboard-card {
+          border-radius: 8px;
+        }
+        .dashboard-panel-header,
+        .dashboard-panel-body {
+          padding: 16px;
+        }
+        .dashboard-panel-heading h2 {
+          font-size: 20px;
+          line-height: 1.2;
+          font-weight: 600;
+          white-space: nowrap;
+        }
+        .clock {
+          font-size: 56px;
+          font-weight: 600;
+          line-height: 1;
+        }
+        .clock small {
+          font-size: 18px;
+          font-weight: 500;
+          color: var(--color-accent);
+        }
+        .date {
+          font-size: 14px;
+          font-weight: 600;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--color-accent);
+        }
+        .dashboard-tab,
+        .dashboard-decisions-link,
+        .dashboard-bots-more {
+          min-height: 44px;
+        }
+      }
+      @media (max-width: 900px) {
+        main.dashboard {
+          --type-tier-1: 48px;
+          --type-tier-2: 32px;
+          padding: 16px;
+        }
+        .clock {
+          font-size: 48px;
+        }
+        .dashboard-usage-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+        .dashboard-home {
+          grid-template-columns: 1fr;
+        }
+        .dashboard-card-decisions,
+        .dashboard-card-usage,
         .dashboard-card-bots,
         .dashboard-card-health,
         .dashboard-card-systems,
-        .dashboard-card-money,
-        .dashboard-card-decisions {
-          grid-column: span 2;
+        .dashboard-card-money {
+          grid-column: 1 / -1;
+          height: fit-content;
+        }
+        .dashboard-money-row {
+          grid-template-columns: 1fr;
+        }
+        .dashboard-bots-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+        /* One-row header: clock+date left; weather, alert chip, brand right. */
+        .header,
+        .header.dashboard-topbar {
+          display: flex;
+          flex-direction: row;
+          flex-wrap: nowrap;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
+        .header-right {
+          display: flex;
+          flex-direction: row;
+          flex-wrap: nowrap;
+          justify-content: flex-end;
+          align-items: center;
+          gap: 10px;
+          width: auto;
+          flex: 1 1 auto;
+          min-width: 0;
+        }
+        .weather {
+          display: flex;
+          width: auto;
+          justify-content: flex-start;
+          align-items: center;
+          padding-right: 10px;
+          border-right: 1px solid var(--color-border);
+          flex: 0 1 auto;
+          min-width: 0;
+        }
+        .weather-feed {
+          display: none;
+        }
+        .weather-main p {
+          display: none;
+        }
+        .weather-main {
+          gap: 8px;
+        }
+        .weather-main > svg {
+          width: 28px;
+          height: 28px;
+        }
+        .weather-main > span {
+          font-size: 28px;
+        }
+        .weather-main strong {
+          font-size: 12px;
+        }
+        .identity {
+          display: flex;
+          flex-direction: row;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+          flex: 0 0 auto;
+        }
+        .identity .wordmark {
+          order: 2;
+          font-size: 16px;
+        }
+        .identity .alert-chip,
+        .identity .global-status {
+          order: 1;
+          margin-top: 0;
+          min-height: 36px;
+          height: 36px;
+          padding: 0 10px;
+          font-size: 11px;
+        }
+        .identity .global-status {
+          min-height: 0;
+          height: auto;
+        }
+        .clock {
+          font-size: 48px;
+        }
+        .decision-q, .dashboard-decision-q {
+          font-size: 16px;
+        }
+      }
+      @media (max-width: 480px) {
+        main.dashboard {
+          --type-tier-1: 40px;
+          --type-tier-2: 28px;
+          --type-tier-3: 18px;
+          --type-detail: 14px;
+          padding: 16px;
+        }
+        .clock {
+          font-size: 40px;
+        }
+        .dashboard-panel-heading h2 {
+          font-size: 18px;
+          white-space: nowrap;
+        }
+        .dashboard-usage-grid,
+        .dashboard-bots-table td.run {
+          /* keep last-run on phone unless it overflows; hide only run column at 360 per mock */
+        }
+        .dashboard-usage-grid {
+          grid-template-columns: 1fr;
+        }
+        .dashboard-bots-table td.run {
+          display: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .dashboard-card,
+        .dashboard-card-money.alert,
+        .dash-tag,
+        .dashboard-usage-bar > i,
+        .alert-chip {
+          transition: none !important;
+          animation: none !important;
+        }
+      }
+
+      @media (min-width: 901px) {
+        .dashboard-home {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          align-items: start;
+        }
+
+        .dashboard-card-bots,
+        .dashboard-card-decisions,
+        .dashboard-card-usage,
+        .dashboard-card-money {
+          grid-column: 1 / -1;
+          height: fit-content;
+        }
+
+        .dashboard-card-health,
+        .dashboard-card-systems {
+          grid-column: span 1;
+          height: fit-content;
+          align-self: start;
         }
 
         .dashboard-schedule-grid {
@@ -284,8 +930,9 @@
           grid-column: span 1;
         }
 
-        .dashboard-card-decisions {
+        .dashboard-card-decisions,
+        .dashboard-card-usage {
           grid-column: span 2;
         }
       }
-    </style><header class="header dashboard-topbar" data-sticky="true"><div class="clock-block"><div class="clock"><span>11:08</span><small>PM</small></div><div class="date">FRIDAY, OCT 2</div></div><div class="header-right"><div class="weather"><div class="weather-main"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-cloud" aria-hidden="true"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path></svg><span>74<!-- -->°<small>F</small></span><div><strong>Partly cloudy</strong><p>Chicago<!-- --> <span>·</span> H <!-- -->78<!-- -->° / L<!-- --> <!-- -->61<!-- -->°</p></div></div><div class="weather-feed"><span class="feed " title="Demo weather · just now">LIVE<i></i></span><span>Feels like <!-- -->73<!-- -->°</span></div></div><div class="identity"><div class="wordmark"><span class="logo"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-activity" aria-hidden="true"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"></path></svg></span>lifedash</div><div class="global-status "><i></i>SYSTEMS NORMAL</div><div class="mode-label">NIGHT<!-- --> MODE <span>/</span> <!-- -->CDT</div></div></div></header><nav class="dashboard-tabs" role="tablist" aria-label="Dashboard views"><button type="button" class="dashboard-tab" role="tab" aria-selected="true">Home</button><a class="dashboard-tab" href="/decisions" role="tab">Decisions</a></nav><div class="domain-columns dashboard-home" data-layout="single-column" data-breakpoint="640"><section class="dashboard-card card dashboard-card-bots" aria-labelledby="bots-title" role="region"><header class="dashboard-panel-header"><div class="dashboard-panel-heading"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bot" aria-hidden="true"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path></svg><h2 id="bots-title">Bots</h2></div><div class="dashboard-panel-meta"><span>Updated <!-- -->just now</span><span class="dashboard-as-of">as of Oct 2, 11:08 PM CT</span></div></header><div class="dashboard-panel-body"><div class="dashboard-bot-list"><div class="dashboard-bot-row"><div><strong>Codex 5h</strong><p>No recent action</p></div><span>idle</span></div><div class="dashboard-bot-row"><div><strong>Codex weekly</strong><p>No recent action</p></div><span>idle</span></div><div class="dashboard-bot-row"><div><strong>Codex resets</strong><p>No recent action</p></div><span>2 available</span></div><div class="dashboard-bot-row"><div><strong>Cursor monthly</strong><p>No recent action</p></div><span>idle</span></div><div class="dashboard-bot-row"><div><strong>Grok Bot weekly</strong><p>No recent action</p></div><span>idle</span></div></div><span class="feed " title="Demo AI telemetry · just now">LIVE<i></i></span></div></section><section class="dashboard-card card dashboard-card-health" aria-labelledby="health-title" role="region"><header class="dashboard-panel-header"><div class="dashboard-panel-heading"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-heart-pulse" aria-hidden="true"><path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5"></path><path d="M3.22 13H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"></path></svg><h2 id="health-title">Health</h2></div><div class="dashboard-panel-meta"><span>Updated <!-- -->just now</span><span class="dashboard-as-of">as of Oct 2, 11:08 PM CT</span></div></header><div class="dashboard-panel-body"><div class="dashboard-health-grid"><div><span>Today</span><strong>8,421<!-- --> steps</strong><p>38 min exercise<!-- --> · Outdoor run · 32 min</p></div><div><span>This week</span><strong>12 habit check-ins</strong></div><div><span>Streak</span><strong>5<!-- --> <!-- -->days</strong><p>Habit streak</p></div></div><section class="domain-section "><div class="domain-section-header"><h3>Habits · this week</h3><span class="feed " title="Demo habits · just now">LIVE<i></i></span></div><div class="domain-habits"><div class="domain-habit-days" aria-hidden="true"><span></span><div><i>M</i><i>T</i><i>W</i><i>T</i><i>F</i><i>S</i><i>S</i></div><span></span></div><div class="domain-habit-row"><span>Vitamins</span><div class="habit-week" aria-label="Vitamins: 6 of 7"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="missed"></i></div><strong>6<!-- -->/<!-- -->7</strong></div><div class="domain-habit-row"><span>Read 30 minutes</span><div class="habit-week" aria-label="Read 30 minutes: 5 of 7"><i class="done"></i><i class="done"></i><i class="missed"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="missed"></i></div><strong>5<!-- -->/<!-- -->7</strong></div><div class="domain-habit-row"><span>Exercise</span><div class="habit-week" aria-label="Exercise: 3 of 7"><i class="done"></i><i class="missed"></i><i class="done"></i><i class="missed"></i><i class="done"></i><i class="missed"></i><i class="missed"></i></div><strong>3<!-- -->/<!-- -->7</strong></div><div class="domain-section-summary">Today · 3 of 3 scheduled complete</div></div></section></div></section><section class="dashboard-card card dashboard-card-schedule" aria-labelledby="schedule-title" role="region"><header class="dashboard-panel-header"><div class="dashboard-panel-heading"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-calendar-days" aria-hidden="true"><path d="M8 2v3"></path><path d="M16 2v3"></path><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M3 9h18"></path><path d="M8 13h.01"></path><path d="M12 13h.01"></path><path d="M16 13h.01"></path><path d="M8 17h.01"></path><path d="M12 17h.01"></path><path d="M16 17h.01"></path></svg><h2 id="schedule-title">Schedule</h2></div><div class="dashboard-panel-meta"><span>Updated <!-- -->just now</span><span class="dashboard-as-of">as of Oct 2, 11:08 PM CT</span></div></header><div class="dashboard-panel-body"><div class="dashboard-schedule-grid"><div class="dashboard-schedule-group"><div class="domain-inline-label"><span>Personal</span><span class="feed " title="Demo calendar · just now">LIVE<i></i></span></div><div class="domain-list-row"><span>Coffee with Alex</span><strong>Sat 12:30 PM</strong></div><div class="domain-list-row"><span>Trail run</span><strong>Mon 8:00 AM</strong></div></div><div class="dashboard-schedule-group"><div class="domain-inline-label"><span>Work</span><span class="feed " title="Demo calendar · just now">LIVE<i></i></span></div><div class="domain-list-row"><span>Product review</span><strong>Sat 10:00 AM</strong></div></div></div></div></section><section class="dashboard-card card dashboard-card-reminders" aria-labelledby="reminders-title" role="region"><header class="dashboard-panel-header"><div class="dashboard-panel-heading"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bell" aria-hidden="true"><path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path></svg><h2 id="reminders-title">Reminders</h2></div><div class="dashboard-panel-meta"><span>Updated <!-- -->just now</span><span class="dashboard-as-of">as of Oct 2, 11:08 PM CT</span></div></header><div class="dashboard-panel-body"><div class="dashboard-reminder-list"><div class="domain-list-row"><span>Review insurance renewal</span><strong>Open</strong></div><div class="domain-list-row"><span>Pick up groceries</span><strong>Open</strong></div><div class="domain-list-row"><span>Internet bill</span><strong>Open</strong></div><div class="domain-list-row"><span>Credit card payment</span><strong>Open</strong></div></div><span class="feed " title="Demo reminders · just now">LIVE<i></i></span></div></section><section class="dashboard-card card dashboard-card-github" aria-labelledby="github-title" role="region"><header class="dashboard-panel-header"><div class="dashboard-panel-heading"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-code-xml lucide-code-2" aria-hidden="true"><path d="m18 16 4-4-4-4"></path><path d="m6 8-4 4 4 4"></path><path d="m14.5 4-5 16"></path></svg><h2 id="github-title">GitHub</h2></div><div class="dashboard-panel-meta"><span>Updated <!-- -->just now</span><span class="dashboard-as-of">as of Oct 2, 11:08 PM CT</span></div></header><div class="dashboard-panel-body"><section class="domain-section domain-grow"><div class="domain-section-header"><h3>GitHub today</h3><span class="feed " title="Demo GitHub · just now">LIVE<i></i></span></div><div class="domain-metrics three"><div><strong>12</strong><span>commits</span></div><div><strong>3</strong><span>active repos</span></div><div><strong>1</strong><span>open PRs</span></div></div><div class="domain-feature-row"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-terminal" aria-hidden="true"><path d="M12 19h8"></path><path d="m4 17 6-6-6-6"></path></svg><span>lifedash</span><strong>8m ago</strong></div></section></div></section><section class="dashboard-card card dashboard-card-goals" aria-labelledby="goals-title" role="region"><header class="dashboard-panel-header"><div class="dashboard-panel-heading"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-target" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg><h2 id="goals-title">Goals</h2></div><div class="dashboard-panel-meta"><span>Updated <!-- -->just now</span><span class="dashboard-as-of">as of Oct 2, 11:08 PM CT</span></div></header><div class="dashboard-panel-body"><section class="domain-section "><div class="domain-section-header"><h3>Goals</h3><span class="feed " title="Local demo goals · just now">LIVE<i></i></span></div><div class="domain-progress-list"><div><div class="domain-list-row"><span>Run 100 miles</span><strong>68/100 mi</strong></div></div><div><div class="domain-list-row"><span>Read 24 books</span><strong>17/24 books</strong></div></div></div></section></div></section><section class="dashboard-card card dashboard-card-projects" aria-labelledby="projects-title" role="region"><header class="dashboard-panel-header"><div class="dashboard-panel-heading"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg><h2 id="projects-title">Projects</h2></div><div class="dashboard-panel-meta"><span>Updated <!-- -->just now</span><span class="dashboard-as-of">as of Oct 2, 11:08 PM CT</span></div></header><div class="dashboard-panel-body"><section class="domain-section domain-projects"><div class="domain-section-header"><h3>Projects</h3><span class="feed " title="Local demo goals · just now">LIVE<i></i></span></div><div class="domain-project-list"><article class="domain-project"><div class="domain-list-row"><span>LifeDash</span><strong>72%</strong></div><div class="progress " role="progressbar" aria-valuenow="72" aria-valuemin="0" aria-valuemax="100"><span style="width:72%"></span></div><p>A quieter view of everything that matters</p></article><article class="domain-project"><div class="domain-list-row"><span>Homelab refresh</span><strong>45%</strong></div><div class="progress " role="progressbar" aria-valuenow="45" aria-valuemin="0" aria-valuemax="100"><span style="width:45%"></span></div><p>Backups, monitoring &amp; a little less maintenance</p></article></div></section></div></section><section class="dashboard-card card dashboard-card-systems" aria-labelledby="systems-title" role="region"><header class="dashboard-panel-header"><div class="dashboard-panel-heading"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-server" aria-hidden="true"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"></rect><rect width="20" height="8" x="2" y="14" rx="2" ry="2"></rect><line x1="6" x2="6.01" y1="6" y2="6"></line><line x1="6" x2="6.01" y1="18" y2="18"></line></svg><h2 id="systems-title">Systems</h2></div><div class="dashboard-panel-meta"><span>Updated <!-- -->just now</span><span class="dashboard-as-of">as of Oct 2, 11:08 PM CT</span></div></header><div class="dashboard-panel-body"><section class="domain-section domain-grow"><div class="domain-section-header"><h3>Mac &amp; network</h3><span class="feed " title="Demo infrastructure · just now">LIVE<i></i></span></div><div class="domain-status-list"><div class="domain-status-row"><i class="status-dot online"></i><span>Mac</span><strong>4d uptime</strong></div><div class="domain-status-row"><i class="status-dot online"></i><span>Internet / API</span><strong>14 ms</strong></div><div class="domain-status-row"><i class="status-dot online"></i><span>VPS</span><strong>24 ms</strong></div></div><div class="domain-metrics three system-metrics"><div><strong class="metric-good">14<!-- -->%</strong><span>CPU</span><div class="progress metric-good" role="progressbar" aria-valuenow="14" aria-valuemin="0" aria-valuemax="100"><span style="width:14%"></span></div><svg class="system-sparkline metric-good" viewBox="0 0 100 24" aria-hidden="true"><line x1="0" y1="22" x2="100" y2="22"></line><polyline points="0,19.2 100,19.2"></polyline></svg></div><div><strong class="metric-good">42<!-- -->%</strong><span>RAM</span><div class="progress metric-good" role="progressbar" aria-valuenow="42" aria-valuemin="0" aria-valuemax="100"><span style="width:42%"></span></div><svg class="system-sparkline metric-good" viewBox="0 0 100 24" aria-hidden="true"><line x1="0" y1="22" x2="100" y2="22"></line><polyline points="0,13.6 100,13.6"></polyline></svg></div><div><strong class="metric-good">38<!-- -->%</strong><span>DISK</span><div class="progress metric-good" role="progressbar" aria-valuenow="38" aria-valuemin="0" aria-valuemax="100"><span style="width:38%"></span></div><svg class="system-sparkline metric-good" viewBox="0 0 100 24" aria-hidden="true"><line x1="0" y1="22" x2="100" y2="22"></line><polyline points="0,14.4 100,14.4"></polyline></svg></div></div></section></div></section></div><footer class="footer"><div class="attention  " aria-live="polite"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg><span>No urgent attention needed</span></div><div class="feed-summary"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-network" aria-hidden="true"><rect x="16" y="16" width="6" height="6" rx="1"></rect><rect x="2" y="16" width="6" height="6" rx="1"></rect><rect x="9" y="2" width="6" height="6" rx="1"></rect><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"></path><path d="M12 12V8"></path></svg><span>8<!-- --> LIVE <span class="footer-divider">/</span> <!-- -->0<!-- --> DEMO FEEDS</span><span class="footer-divider">·</span><span>AUTOMATIC REFRESH</span></div></footer></main>
+    </style><header class="header dashboard-topbar" data-sticky="true"><div class="clock-block"><div class="clock"><span>11:08</span><small>PM</small></div><div class="date">FRIDAY, OCT 2</div></div><div class="header-right"><div class="weather"><div class="weather-main"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-cloud" aria-hidden="true"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path></svg><span>74<!-- -->°<small>F</small></span><div><strong>Partly cloudy</strong><p>H <!-- -->78<!-- -->° / L <!-- -->61<!-- -->°</p></div></div><div class="weather-feed"><span class="feed " title="Demo weather · just now">LIVE<i></i></span><span>Feels like <!-- -->73<!-- -->°</span></div></div><div class="identity"><div class="wordmark"><span class="logo"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-activity" aria-hidden="true"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"></path></svg></span>lifedash</div><div class="global-status "><i></i>SYSTEMS NORMAL</div><div class="mode-label">NIGHT<!-- --> MODE <span>/</span> <!-- -->CDT</div></div></div></header><nav class="dashboard-tabs" role="tablist" aria-label="Dashboard views"><a class="dashboard-tab" href="/" role="tab" aria-current="page" aria-selected="true">Home</a><a class="dashboard-tab" href="/decisions" role="tab">Decisions</a><a class="dashboard-tab" href="/money" role="tab" aria-selected="false">Money</a></nav><div class="domain-columns dashboard-home" data-layout="single-column" data-breakpoint="640"><section class="dashboard-card card dashboard-card-bots" aria-labelledby="bots-title" role="region"><header class="dashboard-panel-header"><div class="dashboard-panel-heading"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bot" aria-hidden="true"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path></svg><h2 id="bots-title">Bots</h2></div><div class="dashboard-panel-meta"><span>Updated <!-- -->just now</span><span class="dashboard-as-of">as of Oct 2, 11:08 PM CT</span></div></header><div class="dashboard-panel-body"><ul class="dashboard-bots-grid"><li class="dashboard-bot-cell"><span class="name">Codex 5h</span><span class="run">—</span><span class="dashboard-bot-dot idle" title="Idle" aria-label="Idle" role="img"></span></li><li class="dashboard-bot-cell"><span class="name">Codex weekly</span><span class="run">—</span><span class="dashboard-bot-dot idle" title="Idle" aria-label="Idle" role="img"></span></li><li class="dashboard-bot-cell"><span class="name">Codex resets</span><span class="run">—</span><span class="dashboard-bot-dot idle" title="Idle" aria-label="Idle" role="img"></span></li><li class="dashboard-bot-cell"><span class="name">Cursor monthly</span><span class="run">—</span><span class="dashboard-bot-dot idle" title="Idle" aria-label="Idle" role="img"></span></li><li class="dashboard-bot-cell"><span class="name">Grok Bot weekly</span><span class="run">—</span><span class="dashboard-bot-dot idle" title="Idle" aria-label="Idle" role="img"></span></li></ul><ul class="dashboard-bots-legend" aria-label="Bot status"><li><span class="dashboard-bot-dot working" aria-hidden="true"></span>working</li><li><span class="dashboard-bot-dot idle" aria-hidden="true"></span>idle</li><li><span class="dashboard-bot-dot blocked" aria-hidden="true"></span>blocked</li><li><span class="dashboard-bot-dot ask" aria-hidden="true"></span>needs Josh</li></ul></div></section><section class="dashboard-card card dashboard-card-health" aria-labelledby="health-title" role="region"><header class="dashboard-panel-header"><div class="dashboard-panel-heading"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-heart-pulse" aria-hidden="true"><path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5"></path><path d="M3.22 13H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"></path></svg><h2 id="health-title">Health</h2></div><div class="dashboard-panel-meta"><span>Updated <!-- -->just now</span><span class="dashboard-as-of">as of Oct 2, 11:08 PM CT</span></div></header><div class="dashboard-panel-body"><div class="dashboard-health-grid"><div><span>Today</span><strong>8,421<!-- --> steps</strong><p>38 min exercise<!-- --> · Outdoor run · 32 min</p></div><div><span>This week</span><strong>12 habit check-ins</strong></div><div><span>Streak</span><strong>5<!-- --> <!-- -->days</strong><p>Habit streak</p></div></div><section class="domain-section "><div class="domain-section-header"><h3>Habits · this week</h3><span class="feed " title="Demo habits · just now">LIVE<i></i></span></div><div class="domain-habits"><div class="domain-habit-days" aria-hidden="true"><span></span><div><i>M</i><i>T</i><i>W</i><i>T</i><i>F</i><i>S</i><i>S</i></div><span></span></div><div class="domain-habit-row"><span>Vitamins</span><div class="habit-week" aria-label="Vitamins: 6 of 7"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="missed"></i></div><strong>6<!-- -->/<!-- -->7</strong></div><div class="domain-habit-row"><span>Read 30 minutes</span><div class="habit-week" aria-label="Read 30 minutes: 5 of 7"><i class="done"></i><i class="done"></i><i class="missed"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="missed"></i></div><strong>5<!-- -->/<!-- -->7</strong></div><div class="domain-habit-row"><span>Exercise</span><div class="habit-week" aria-label="Exercise: 3 of 7"><i class="done"></i><i class="missed"></i><i class="done"></i><i class="missed"></i><i class="done"></i><i class="missed"></i><i class="missed"></i></div><strong>3<!-- -->/<!-- -->7</strong></div><div class="domain-section-summary">Today · 3 of 3 scheduled complete</div></div></section></div></section><section class="dashboard-card card dashboard-card-systems" aria-labelledby="systems-title" role="region"><header class="dashboard-panel-header"><div class="dashboard-panel-heading"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-server" aria-hidden="true"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"></rect><rect width="20" height="8" x="2" y="14" rx="2" ry="2"></rect><line x1="6" x2="6.01" y1="6" y2="6"></line><line x1="6" x2="6.01" y1="18" y2="18"></line></svg><h2 id="systems-title">Systems</h2></div><div class="dashboard-panel-meta"><span>Updated <!-- -->just now</span><span class="dashboard-as-of">as of Oct 2, 11:08 PM CT</span></div></header><div class="dashboard-panel-body"><section class="domain-section domain-grow"><div class="domain-section-header"><h3>Mac &amp; network</h3><span class="feed " title="Demo infrastructure · just now">LIVE<i></i></span></div><div class="domain-status-list"><div class="domain-status-row"><i class="status-dot online"></i><span>Mac</span><strong>4d uptime</strong></div><div class="domain-status-row"><i class="status-dot online"></i><span>Internet / API</span><strong>14 ms</strong></div><div class="domain-status-row"><i class="status-dot online"></i><span>VPS</span><strong>24 ms</strong></div></div><div class="domain-metrics three system-metrics"><div><strong class="metric-good">14<!-- -->%</strong><span>CPU</span><div class="progress metric-good" role="progressbar" aria-valuenow="14" aria-valuemin="0" aria-valuemax="100"><span style="width:14%"></span></div><svg class="system-sparkline metric-good" viewBox="0 0 100 24" aria-hidden="true"><line x1="0" y1="22" x2="100" y2="22"></line><polyline points="0,19.2 100,19.2"></polyline></svg></div><div><strong class="metric-good">42<!-- -->%</strong><span>RAM</span><div class="progress metric-good" role="progressbar" aria-valuenow="42" aria-valuemin="0" aria-valuemax="100"><span style="width:42%"></span></div><svg class="system-sparkline metric-good" viewBox="0 0 100 24" aria-hidden="true"><line x1="0" y1="22" x2="100" y2="22"></line><polyline points="0,13.6 100,13.6"></polyline></svg></div><div><strong class="metric-good">38<!-- -->%</strong><span>DISK</span><div class="progress metric-good" role="progressbar" aria-valuenow="38" aria-valuemin="0" aria-valuemax="100"><span style="width:38%"></span></div><svg class="system-sparkline metric-good" viewBox="0 0 100 24" aria-hidden="true"><line x1="0" y1="22" x2="100" y2="22"></line><polyline points="0,14.4 100,14.4"></polyline></svg></div></div></section></div></section></div><footer class="footer"><div class="attention  " aria-live="polite"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg><span>No urgent attention needed</span></div><div class="feed-summary"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-network" aria-hidden="true"><rect x="16" y="16" width="6" height="6" rx="1"></rect><rect x="2" y="16" width="6" height="6" rx="1"></rect><rect x="9" y="2" width="6" height="6" rx="1"></rect><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"></path><path d="M12 12V8"></path></svg><span>8<!-- --> LIVE <span class="footer-divider">/</span> <!-- -->0<!-- --> DEMO FEEDS</span><span class="footer-divider">·</span><span>AUTOMATIC REFRESH</span></div></footer></main>

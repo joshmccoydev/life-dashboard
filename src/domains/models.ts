@@ -43,7 +43,7 @@ export type ReminderState = {
     id: string;
     title: string;
     due: string | null;
-    completed: boolean;
+    completed?: boolean;
     listName?: string;
     notes?: string | null;
     dashboardRole?: "payment" | "goal" | "project" | "ordinary";
@@ -89,7 +89,7 @@ export type BuildState = {
 };
 export type AIProvider = {
   name: string;
-  status: "running" | "idle" | "offline" | "unknown" | "waiting";
+  status: "running" | "idle" | "offline" | "unknown" | "waiting" | "blocked";
   remainingPercent: number | null;
   value?: string;
   availableCount?: number;
@@ -101,6 +101,7 @@ export type AIProvider = {
   costToday: number | null;
   jobsCompleted: number | null;
   errors: number | null;
+  updatedAt?: string | null;
 };
 export type AITelemetryState = { providers: AIProvider[] };
 export type SystemMetric = {
@@ -161,6 +162,22 @@ export type DecisionsHomeState = {
   count: number;
   cards: DecisionHomeCard[];
 };
+export type UsageProviderId = "grok" | "chatgpt" | "opencode" | "nous";
+export type UsageRow = {
+  id: UsageProviderId;
+  name: string;
+  plan: string | null;
+  monthly_cost_usd: number | null;
+  pct_used: number | null;
+  pct_window: "weekly" | null;
+  resets_at: string | null;
+  as_of: string | null;
+  source: string | null;
+  note: string | null;
+  stale: boolean;
+  manual: boolean;
+};
+export type UsageState = { providers: UsageRow[] };
 export type HomeState = {
   sensors: { name: string; value: number | string; unit: string }[];
 };
@@ -176,8 +193,9 @@ export type DashboardData = {
   habits: DataState<HabitState>;
   goals: DataState<GoalState>;
   decisions?: DataState<DecisionsHomeState>;
+  usage?: DataState<UsageState>;
 };
-export type Domain = Exclude<keyof DashboardData, "decisions">;
+export type Domain = Exclude<keyof DashboardData, "decisions" | "usage">;
 export type Mode = "morning" | "day" | "evening" | "night";
 export type DisplayConfig = {
   timezone: string;

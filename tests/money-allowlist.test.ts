@@ -116,7 +116,34 @@ test("summarizeMoney returns unknown with null money fields for non-objects", ()
     billsDueCount: 0,
     depositTarget: null,
     status: "unknown",
+    bills: [],
   });
+});
+
+test("summarizeMoney allowlists bills as name, due, and amount only", () => {
+  const output = summarizeMoney({
+    next_bills: [
+      {
+        name: "Synthetic utility",
+        due: "2026-11-03",
+        amount: 10,
+        note: "secret note should not ship",
+        payee: "SYNTHETIC_PAYEE_7f4c",
+        account_number: "SYNTHETIC_ACCOUNT_91e2",
+      },
+    ],
+    alerts: [],
+  });
+  assert.deepEqual(output.bills, [
+    { name: "Synthetic utility", due: "2026-11-03", amount: 10 },
+  ]);
+  const serialized = JSON.stringify(output);
+  assert.equal(serialized.includes("secret note"), false);
+  assert.equal(serialized.includes("SYNTHETIC_PAYEE_7f4c"), false);
+  assert.equal(serialized.includes("SYNTHETIC_ACCOUNT_91e2"), false);
+  for (const bill of output.bills) {
+    assert.deepEqual(Object.keys(bill).sort(), ["amount", "due", "name"]);
+  }
 });
 
 test("buildSnapshot allowlists the money data shape", () => {

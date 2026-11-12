@@ -10,9 +10,9 @@ export default function GlobalError() {
       <body
         style={{
           margin: 0,
-          background: "#0b1017",
-          color: "#dce3ed",
-          fontFamily: "Arial",
+          background: "var(--bg)",
+          color: "var(--fg)",
+          fontFamily: "var(--font-ui)",
           padding: "8vw",
           fontSize: "24px",
         }}

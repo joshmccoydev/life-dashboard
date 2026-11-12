@@ -9,11 +9,9 @@ import { installFakeDom } from "./fake-dom";
 import { Dashboard } from "../src/components/dashboard";
 import type { DashboardData, DataState, DisplayConfig } from "../src/domains/models";
 
-// CTO-0031 (follow-up F1 of CTO-0015 rev2): the header status must read
-// FEED ATTENTION for a visible feed whose status is not "ready" even when its
-// lastSuccess is fresh. Mounted Dashboard with the real hook, fake timers and a
-// fake fetch, as in clock-tick.test.ts. The machine is healthy and there is no
-// connection error, so only the feed status can move the header.
+// LIFE-DASH-V2: FEED ATTENTION is replaced by a Money "N alerts" chip.
+// Stale or error feeds no longer change the header to FEED ATTENTION.
+// Mounted Dashboard with the real hook, as in clock-tick.test.ts.
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = JSON.parse(
   readFileSync(join(here, "fixtures/dashboard-data.json"), "utf8"),
@@ -28,19 +26,23 @@ const T = Date.parse("2026-10-03T04:00:00.000Z");
 const SECOND = 1000;
 const POLL_MS = 30 * SECOND;
 
-type FeedKey = Exclude<keyof DashboardData, "decisions">;
+type FeedKey = Exclude<keyof DashboardData, "decisions" | "usage">;
 
 /** Every feed ready with lastSuccess 1 s before `atMs`; `override` sets one feed's status. */
 function feedsAt(atMs: number, override?: { feed: FeedKey; status: DataState<unknown>["status"] }) {
   const data = structuredClone(fixture.data);
   for (const state of Object.values(data)) {
+    if (!state || typeof state !== "object" || !("status" in state)) continue;
     state.status = "ready";
     state.error = null;
     state.lastSuccess = new Date(atMs - SECOND).toISOString();
   }
   if (override) {
-    data[override.feed].status = override.status;
-    data[override.feed].error = "boom";
+    const feed = data[override.feed];
+    if (feed) {
+      feed.status = override.status;
+      feed.error = "boom";
+    }
   }
   return data;
 }
@@ -116,14 +118,14 @@ async function assertHeader(
   }
 }
 
-test("header reads FEED ATTENTION for a feed with status error and fresh lastSuccess", async () => {
+test("header does not read FEED ATTENTION for a feed with status error and fresh lastSuccess", async () => {
   const machine = fixture.data.systems.data?.machine;
   assert.equal(machine?.status, "online", "precondition: machine healthy");
-  await assertHeader({ feed: "calendar", status: "error" }, "FEED ATTENTION");
+  await assertHeader({ feed: "calendar", status: "error" }, "SYSTEMS NORMAL");
 });
 
-test("header reads FEED ATTENTION for a feed with status stale and fresh lastSuccess", async () => {
-  await assertHeader({ feed: "build", status: "stale" }, "FEED ATTENTION");
+test("header does not read FEED ATTENTION for a feed with status stale and fresh lastSuccess", async () => {
+  await assertHeader({ feed: "build", status: "stale" }, "SYSTEMS NORMAL");
 });
 
 test("control: all feeds ready and fresh, header is not FEED ATTENTION", async () => {

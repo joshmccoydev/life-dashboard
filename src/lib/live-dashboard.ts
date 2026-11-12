@@ -17,6 +17,9 @@ import type {
   DashboardData,
   DataState,
   DecisionsHomeState,
+  UsageProviderId,
+  UsageRow,
+  UsageState,
   WeatherState,
 } from "@/domains/models";
 import { localDateKey, zonedDateTime } from "@/lib/time";
@@ -237,6 +240,30 @@ function applePart(feeds: FeedSnapshot, key: string): unknown {
   return isRecord(entry.data) ? (entry.data[key] ?? null) : null;
 }
 
+function applePanelState<T>(
+  entry: FeedEntry,
+  value: unknown,
+  now: Date,
+  refreshMs: number,
+): DataState<T> {
+  const panel = isRecord(value) ? value : null;
+  const stamp = panel && typeof panel.as_of === "string" ? panel.as_of : entry.updatedAt;
+  const stampMs = stamp ? Date.parse(stamp) : NaN;
+  const stale = !Number.isFinite(stampMs) || now.getTime() - stampMs > 24 * 60 * 60 * 1000;
+  const data = value as T | null;
+  return {
+    loading: false,
+    data,
+    source: "real",
+    provider: entry.source ? `Cloudflare KV (${entry.source})` : "Cloudflare KV",
+    status: stale ? "stale" : data === null ? "error" : "ready",
+    lastSuccess: stamp ?? null,
+    lastAttempt: stamp ?? now.toISOString(),
+    error: data === null ? "Feed unavailable" : null,
+    refreshMs,
+  };
+}
+
 function decisionsState(
   entry: FeedEntry,
   now: Date,
@@ -264,6 +291,61 @@ function decisionsState(
   return feedState(entry, now, Math.max(config.intervals.ai, 3600000), data);
 }
 
+
+function isUsageId(value: unknown): value is UsageProviderId {
+  return (
+    value === "grok" ||
+    value === "chatgpt" ||
+    value === "opencode" ||
+    value === "nous"
+  );
+}
+
+function usageState(entry: FeedEntry, now: Date): DataState<UsageState> {
+  const raw = entry.data;
+  const interval = Math.max(config.intervals.ai, 3600000);
+  if (!isRecord(raw) || !Array.isArray(raw.providers)) {
+    return feedState<UsageState>(entry, now, interval, null);
+  }
+  const providers: UsageRow[] = [];
+  for (const item of raw.providers) {
+    if (!isRecord(item) || !isUsageId(item.id)) continue;
+    const pct =
+      typeof item.pct_used === "number" && Number.isFinite(item.pct_used)
+        ? item.pct_used
+        : null;
+    const cost =
+      typeof item.monthly_cost_usd === "number" &&
+      Number.isFinite(item.monthly_cost_usd)
+        ? item.monthly_cost_usd
+        : null;
+    const id = item.id;
+    const asOf = typeof item.as_of === "string" ? item.as_of : null;
+    const staleAfterMs = id === "chatgpt" ? 6 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+    const ageStale = asOf !== null && Number.isFinite(Date.parse(asOf)) && now.getTime() - Date.parse(asOf) > staleAfterMs;
+    providers.push({
+      id,
+      name: typeof item.name === "string" ? item.name : String(item.id),
+      plan: typeof item.plan === "string" ? item.plan : null,
+      monthly_cost_usd: cost,
+      pct_used: pct,
+      pct_window: item.pct_window === "weekly" ? "weekly" : null,
+      resets_at: typeof item.resets_at === "string" ? item.resets_at : null,
+      as_of: asOf,
+      source: typeof item.source === "string" ? item.source : null,
+      note: typeof item.note === "string" ? item.note : null,
+      stale: Boolean(item.stale) || ageStale,
+      manual: Boolean(item.manual),
+    });
+  }
+  if (!providers.length) {
+    return feedState<UsageState>(entry, now, interval, null);
+  }
+  const state = feedState(entry, now, interval, { providers });
+  if (providers.some((provider) => provider.stale)) state.status = "stale";
+  return state;
+}
+
 export function dashboardFromFeeds(
   feeds: FeedSnapshot,
   now: Date,
@@ -278,6 +360,9 @@ export function dashboardFromFeeds(
   | "habits"
   | "goals"
   | "decisions"
+  | "usage"
+  | "weather"
+  | "build"
 > {
   return {
     calendar: feedState(
@@ -286,11 +371,11 @@ export function dashboardFromFeeds(
       Math.max(config.intervals.calendar, 3600000),
       applePart(feeds, "calendar") as DashboardData["calendar"]["data"],
     ),
-    reminders: feedState(
+    reminders: applePanelState(
       feeds.apple,
+      applePart(feeds, "reminders"),
       now,
       Math.max(config.intervals.reminders, 3600000),
-      applePart(feeds, "reminders") as DashboardData["reminders"]["data"],
     ),
     finance: feedState(
       feeds.money,
@@ -314,19 +399,22 @@ export function dashboardFromFeeds(
       Math.max(config.intervals.systems, 3600000),
       hostToSystemState(feeds.host.data),
     ),
-    habits: feedState(
+    habits: applePanelState(
       feeds.apple,
+      applePart(feeds, "habits"),
       now,
       Math.max(config.intervals.habits, 3600000),
-      applePart(feeds, "habits") as DashboardData["habits"]["data"],
     ),
-    goals: feedState(
+    goals: applePanelState(
       feeds.apple,
+      applePart(feeds, "goals"),
       now,
       Math.max(config.intervals.goals, 3600000),
-      applePart(feeds, "goals") as DashboardData["goals"]["data"],
     ),
     decisions: decisionsState(feeds.decisions, now),
+    usage: usageState(feeds.usage, now),
+    weather: feedState(feeds.weather, now, config.intervals.weather),
+    build: feedState(feeds.build, now, config.intervals.build),
   };
 }
 
@@ -339,14 +427,15 @@ export async function loadLiveDashboard(
   const incoming = await readKvFeeds(env?.FEEDS_KV);
   const feeds = mergeFeeds(null, incoming, now);
 
+  const fromFeeds = dashboardFromFeeds(feeds, now);
   const [weather, build] = await Promise.all([
-    fetchWeatherState(dependencies, now, config.intervals.weather),
-    fetchGitHubState(dependencies, now, config.intervals.build),
+    feeds.weather.data !== null ? Promise.resolve(fromFeeds.weather) : fetchWeatherState(dependencies, now, config.intervals.weather),
+    feeds.build.data !== null ? Promise.resolve(fromFeeds.build) : fetchGitHubState(dependencies, now, config.intervals.build),
   ]);
 
   return {
+    ...fromFeeds,
     weather,
-    ...dashboardFromFeeds(feeds, now),
     build,
   };
 }

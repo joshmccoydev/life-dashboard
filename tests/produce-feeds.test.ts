@@ -4,6 +4,7 @@ import {
   buildApple,
   buildBots,
   buildHost,
+  DEFAULT_PATHS,
   buildSnapshot,
   parseStatus,
   planKvPut,
@@ -56,6 +57,7 @@ test("parseStatus returns one entry per section and nulls missing keys", () => {
       last_done: "Sent the summary",
       next_up: "Check the ledger",
       needs_josh: null,
+      open_asks: 0,
     },
     {
       bot: "Arnold",
@@ -64,8 +66,37 @@ test("parseStatus returns one entry per section and nulls missing keys", () => {
       last_done: "Completed the workout",
       next_up: "Sleep",
       needs_josh: null,
+      open_asks: 0,
     },
   ]);
+});
+
+test("parseStatus counts open [ASK] rows and ignores [DONE] and the needs_josh line", () => {
+  const markdown = [
+    "## Chief",
+    "needs_josh: approve the box delete list",
+    "- [ASK] 2026-11-06 | q: park forge.relay?",
+    "- [ASK] 2026-11-06 | q: WARN not ESCALATE?",
+    "- [DONE] 2026-11-05 | q: already answered",
+    "",
+    "## Scout",
+    "needs_josh: resume scout's grok-side routine",
+    "- [DONE] 2026-11-02 | q: approve more first touches",
+    "",
+    "## Dolly",
+    "needs_josh:",
+    "- [ASK] 2026-11-12 | q: real lease signing times?",
+  ].join("\n");
+  const items = parseStatus(markdown);
+  assert.equal(items[0]?.bot, "Chief");
+  assert.equal(items[0]?.open_asks, 2);
+  assert.equal(items[0]?.needs_josh, "approve the box delete list");
+  assert.equal(items[1]?.bot, "Scout");
+  assert.equal(items[1]?.open_asks, 0);
+  assert.equal(items[1]?.needs_josh, "resume scout's grok-side routine");
+  assert.equal(items[2]?.bot, "Dolly");
+  assert.equal(items[2]?.open_asks, 1);
+  assert.equal(items[2]?.needs_josh, null);
 });
 
 test("readJsonEntry parses valid JSON and uses its updated_at", () => {
@@ -178,6 +209,8 @@ test("buildHost parses uptime, disk, and crontab output", () => {
   assert.deepEqual(entry.data, {
     uptimeSeconds: 12_345,
     loadavg: [0.25, 0.5, 0.75],
+    cpuPercent: null,
+    memoryPercent: null,
     disk: { usedPct: 42 },
     crons: 2,
   });
@@ -199,9 +232,41 @@ test("buildHost turns failing commands into null fields", () => {
   assert.deepEqual(entry.data, {
     uptimeSeconds: 67,
     loadavg: [0.1, 0.2, 0.3],
+    cpuPercent: null,
+    memoryPercent: null,
     disk: { usedPct: null },
     crons: null,
   });
+});
+
+test("buildHost copies injected CPU and memory metrics", () => {
+  const entry = buildHost({ run: () => "", uptime: () => 1, loadavg: () => [], cpuMemory: () => ({ cpuPercent: 24, memoryPercent: 61 }), now: new Date("2026-10-31T00:00:00.000Z") });
+  assert.equal((entry.data as { cpuPercent: number }).cpuPercent, 24);
+  assert.equal((entry.data as { memoryPercent: number }).memoryPercent, 61);
+});
+
+test("buildApple composes an allowlisted calendar from life-dash files", () => {
+  const paths = { apple: "/no/apple.json", calendar: "/calendar.json", reminders: "/reminders.json", habits: "/habits.json", goals: "/goals.json" };
+  const entry = buildApple(paths, inlineReadFile({ [paths.calendar]: JSON.stringify({ as_of: "2026-10-31T12:00:00.000Z", events: [{ title: "Review", start: "2026-10-31T13:00:00Z", end: "2026-10-31T14:00:00Z", calendar: "WORK", attendees: ["private@example.test"], location: "private" }, { title: "bad", start: "bad", end: "2026-10-31", calendar: "else" }] }) }));
+  assert.equal(entry.source, "box:life-dash");
+  assert.deepEqual(entry.data, { calendar: { events: [{ id: "Review:2026-10-31T13:00:00Z", title: "Review", start: "2026-10-31T13:00:00Z", end: "2026-10-31T14:00:00Z", calendar: "work" }] }, reminders: null, habits: null, goals: null });
+  assert.equal(entry.updatedAt, "2026-10-31T12:00:00.000Z");
+});
+
+test("buildApple stays not wired when no life-dash sources are valid", () => {
+  const paths = { apple: "/missing/apple.json", calendar: "/missing/calendar.json", reminders: "/missing/reminders.json", habits: "/missing/habits.json", goals: "/missing/goals.json" };
+  assert.equal(buildApple(paths, inlineReadFile({})).source, "mac:not-wired");
+});
+
+test("buildWeather and buildGitHub map only supported feed fields", async (t) => {
+  const { buildWeather, buildGitHub } = await import("../scripts/produce-feeds.ts");
+  const weatherPath = DEFAULT_PATHS.weather;
+  const buildPath = DEFAULT_PATHS.build;
+  const read = inlineReadFile({ [weatherPath]: JSON.stringify({ as_of: "2026-10-31T12:00:00Z", now: 70, feels_like: 68, high: 75, low: 60, condition: "Clear", code: 0, unit: "F", location: "Elsewhere", is_day: true, phone: "excluded" }), [buildPath]: JSON.stringify({ as_of: "2026-10-31T12:00:00Z", username: "user", commits_today: 2, active_repos: 1, open_prs: 3, last_activity: "today", repositories: [{ name: "repo", commits: 2 }], secret: "excluded", wowTitle: "wow" }) });
+  assert.equal((buildWeather(weatherPath, read).data as { temperature: number }).temperature, 70);
+  const buildData = buildGitHub(buildPath, read).data as Record<string, unknown>;
+  assert.equal(buildData.commitsToday, 2);
+  assert.equal(Object.hasOwn(buildData, "secret"), false);
 });
 
 test("buildApple marks a missing apple export as not wired", () => {
@@ -213,6 +278,42 @@ test("buildApple marks a missing apple export as not wired", () => {
     source: "mac:not-wired",
     note: "not connected",
   });
+});
+
+test("Apple export defaults to LifeDash path and allowlists its four panel lists", () => {
+  assert.equal(DEFAULT_PATHS.apple, "/workspace/exports/life-dash/apple-dash.json");
+  const as_of = "2026-11-12T10:00:00-06:00";
+  const path = DEFAULT_PATHS.apple;
+  const entry = buildApple(
+    { apple: path },
+    inlineReadFile({
+      [path]: JSON.stringify({
+        as_of,
+        source: "mac-reminders",
+        lists: {
+          Personal: [{ title: "Personal item", due: "2026-11-13", flagged: true, completed: true, notes: "private" }],
+          Tasks: [{ title: "Task item", due: null, flagged: false, completed: false }],
+          Habits: [{ title: "Habit item", due: "2026-11-15", flagged: false }],
+          Goals: [{ title: "Goal title", due: "2026-12-01", flagged: false, amount: 99 }],
+          Other: [{ title: "excluded" }],
+        },
+      }),
+    }),
+  );
+  const data = entry.data as {
+    reminders: { as_of: string; items: { title: string; due: string | null; flagged: boolean }[] };
+    habits: { as_of: string; habits: { title: string }[] };
+    goals: { as_of: string; goals: { title: string }[] };
+  };
+  assert.equal(data.reminders.as_of, as_of);
+  assert.deepEqual(data.reminders.items.map(({ title, due, flagged }) => ({ title, due, flagged })), [
+    { title: "Personal item", due: "2026-11-13", flagged: true },
+    { title: "Task item", due: null, flagged: false },
+  ]);
+  assert.deepEqual(data.habits.habits.map(({ title }) => title), ["Habit item"]);
+  assert.deepEqual(data.goals.goals, [{ title: "Goal title" }]);
+  assert.equal(data.habits.as_of, as_of);
+  assert.equal(data.goals.as_of, as_of);
 });
 
 test("buildSnapshot assigns the requested source to every entry", () => {

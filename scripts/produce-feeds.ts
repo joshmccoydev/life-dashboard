@@ -7,6 +7,23 @@ import {
   type Snapshot as DecisionSnapshot,
 } from "../src/lib/decisions";
 import { stripPrivate } from "../src/lib/privacy";
+import {
+  USAGE_DEFAULT_PATHS,
+  allowlistedUsageRow,
+  buildUsageState,
+  newestUsageAsOf,
+  usageHasAnyData,
+} from "../src/lib/usage";
+import {
+  OPEN_DECISIONS_PATH,
+  openDecisionsToFeed,
+  readOpenDecisions,
+} from "../src/lib/open-decisions";
+import {
+  LEDGER_JSON_PATH,
+  parseChicagoStamp,
+  readLedgerBots,
+} from "../src/lib/bots-ledger";
 
 export type Entry = {
   data: unknown;
@@ -23,6 +40,9 @@ export type Snapshot = {
   host: Entry;
   apple: Entry;
   decisions?: Entry;
+  usage?: Entry;
+  weather?: Entry;
+  build?: Entry;
 };
 
 export type KvDeps = {
@@ -36,7 +56,7 @@ export type DecisionsResult = {
   ok: boolean;
   data: DecisionSnapshot | null;
   updatedAt: string | null;
-  source: "box:decisions";
+  source: "box:decisions" | "box:open-decisions";
   error?: string;
 };
 
@@ -50,6 +70,7 @@ type BuildSnapshotOptions = {
   run?: RunCommand;
   uptime?: () => number;
   loadavg?: () => number[];
+  cpuMemory?: () => { cpuPercent: number | null; memoryPercent: number | null };
   now?: Date;
 };
 
@@ -61,7 +82,14 @@ export const MONEY_ALLOWED_KEYS = [
   "billsDueCount",
   "depositTarget",
   "status",
+  "bills",
 ] as const;
+
+export type MoneyBill = {
+  name: string;
+  due: string | null;
+  amount: number | null;
+};
 
 export const HEALTH_ALLOWED_KEYS = [
   "trainingDoneToday",
@@ -76,6 +104,7 @@ export type MoneySummary = {
   billsDueCount: number;
   depositTarget: number | null;
   status: "ok" | "alert" | "unknown";
+  bills: MoneyBill[];
 };
 
 export type HealthSummary = {
@@ -90,6 +119,20 @@ type FeedPaths = {
   money: string;
   health: string;
   apple: string;
+  openDecisions: string;
+  grokPrimary: string;
+  grokFallback: string;
+  chatgpt: string;
+  opencode: string;
+  nous: string;
+  costSheet: string;
+  ledger: string;
+  weather: string;
+  calendar: string;
+  build: string;
+  reminders: string;
+  habits: string;
+  goals: string;
 };
 
 type ReadFile = (path: string) => string | Buffer;
@@ -105,13 +148,28 @@ type StatusItem = {
   last_done: string | null;
   next_up: string | null;
   needs_josh: string | null;
+  open_asks: number;
 };
 
 export const DEFAULT_PATHS: FeedPaths = {
   status: "/workspace/vault/00 Home/Bots/Status.md",
   money: "/workspace/exports/buffett-dash.json",
   health: "/workspace/exports/arnold-dash.json",
-  apple: "/workspace/exports/apple-dash.json",
+  apple: "/workspace/exports/life-dash/apple-dash.json",
+  openDecisions: OPEN_DECISIONS_PATH,
+  grokPrimary: USAGE_DEFAULT_PATHS.grokPrimary,
+  grokFallback: USAGE_DEFAULT_PATHS.grokFallback,
+  chatgpt: USAGE_DEFAULT_PATHS.chatgpt,
+  opencode: USAGE_DEFAULT_PATHS.opencode,
+  nous: USAGE_DEFAULT_PATHS.nous,
+  costSheet: USAGE_DEFAULT_PATHS.costSheet,
+  ledger: LEDGER_JSON_PATH,
+  weather: "/workspace/exports/life-dash/weather.json",
+  calendar: "/workspace/exports/life-dash/calendar.json",
+  build: "/workspace/exports/life-dash/build.json",
+  reminders: "/workspace/exports/life-dash/reminders.json",
+  habits: "/workspace/exports/life-dash/habits.json",
+  goals: "/workspace/exports/life-dash/goals.json",
 };
 
 function toText(contents: string | Buffer): string {
@@ -137,6 +195,19 @@ function billAmount(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function summarizeBill(value: unknown): MoneyBill {
+  if (isRecord(value)) {
+    const rawName = typeof value.name === "string" ? value.name.trim() : "";
+    const name = rawName ? stripPrivate(rawName) || "—" : "—";
+    const due =
+      typeof value.due === "string" && value.due.trim() !== ""
+        ? value.due.trim()
+        : null;
+    return { name, due, amount: billAmount(value) };
+  }
+  return { name: "—", due: null, amount: billAmount(value) };
+}
+
 export function summarizeMoney(raw: unknown): MoneySummary {
   const source = isRecord(raw) ? raw : null;
   const cash = source?.cash_on_hand;
@@ -146,10 +217,11 @@ export function summarizeMoney(raw: unknown): MoneySummary {
 
   let billsDueTotal: number | null = null;
   if (Array.isArray(bills)) {
-    billsDueTotal = bills.reduce((total, value) => {
+    const rawTotal = bills.reduce((total, value) => {
       const amount = billAmount(value);
       return amount === null ? total : total + amount;
     }, 0);
+    billsDueTotal = Math.round(rawTotal * 100) / 100;
   }
 
   return {
@@ -165,6 +237,7 @@ export function summarizeMoney(raw: unknown): MoneySummary {
         : Array.isArray(alerts) && alerts.length > 0
           ? "alert"
           : "ok",
+    bills: Array.isArray(bills) ? bills.map(summarizeBill) : [],
   };
 }
 
@@ -347,12 +420,19 @@ export function parseStatus(markdown: string): StatusItem[] {
         last_done: null,
         next_up: null,
         needs_josh: null,
+        open_asks: 0,
       };
       seen.clear();
       continue;
     }
 
     if (!current) continue;
+
+    // Open asks are the `- [ASK]` rows, not the free-text needs_josh: line.
+    if (/^\s*-\s*\[ASK\]/i.test(line)) {
+      current.open_asks += 1;
+      continue;
+    }
 
     const keyLine = line.match(
       /^\s*(updated|working_on|last_done|next_up|needs_josh):\s*(.*?)\s*$/,
@@ -387,11 +467,21 @@ export function readJsonEntry(
 }
 
 export function buildBots(
-  paths: Pick<FeedPaths, "status">,
+  paths: Pick<FeedPaths, "status"> & Partial<Pick<FeedPaths, "ledger">>,
   readFile: ReadFile = fs.readFileSync,
   stat: Stat = fs.statSync,
   now: Date = new Date(),
 ): Entry {
+  const ledgerPath = paths.ledger ?? LEDGER_JSON_PATH;
+  const ledger = readLedgerBots(readFile, ledgerPath);
+  if (ledger) {
+    return {
+      data: { bots: ledger.bots },
+      updatedAt: ledger.asOf,
+      source: "box:ledger",
+    };
+  }
+
   let statusMarkdown: string;
   try {
     statusMarkdown = toText(readFile(paths.status));
@@ -416,6 +506,9 @@ export function buildBots(
 
   const bots = parseStatus(statusMarkdown).map((item) => ({
     ...item,
+    updated: item.updated
+      ? (parseChicagoStamp(item.updated) ?? item.updated)
+      : item.updated,
     working_on: item.working_on ? stripPrivate(item.working_on) : item.working_on,
     last_done: item.last_done ? stripPrivate(item.last_done) : item.last_done,
     next_up: item.next_up ? stripPrivate(item.next_up) : item.next_up,
@@ -448,15 +541,46 @@ function countCrons(output: string): number {
     .filter((line) => line.length > 0 && !line.startsWith("#")).length;
 }
 
+function readProcMetrics(): { cpuPercent: number | null; memoryPercent: number | null } {
+  try {
+    const readCpu = () => {
+      const line = fs.readFileSync("/proc/stat", "utf8").split(/\r?\n/, 1)[0];
+      const values = line.trim().split(/\s+/).slice(1).map(Number);
+      if (values.length < 4 || values.some((value) => !Number.isFinite(value))) return null;
+      return { idle: values[3] + (values[4] ?? 0), total: values.reduce((sum, value) => sum + value, 0) };
+    };
+    const before = readCpu();
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 150);
+    const after = readCpu();
+    let cpuPercent: number | null = null;
+    if (before && after) {
+      const total = after.total - before.total;
+      const idle = after.idle - before.idle;
+      if (total > 0) cpuPercent = Math.max(0, Math.min(100, Math.round((1 - idle / total) * 100)));
+    }
+    const mem = fs.readFileSync("/proc/meminfo", "utf8");
+    const totalKb = Number(mem.match(/^MemTotal:\s+(\d+)/m)?.[1]);
+    const availableKb = Number(mem.match(/^MemAvailable:\s+(\d+)/m)?.[1]);
+    const memoryPercent = totalKb > 0 && Number.isFinite(availableKb)
+      ? Math.max(0, Math.min(100, Math.round((1 - availableKb / totalKb) * 100)))
+      : null;
+    return { cpuPercent, memoryPercent };
+  } catch {
+    return { cpuPercent: null, memoryPercent: null };
+  }
+}
+
 export function buildHost({
   run,
   uptime,
   loadavg,
+  cpuMemory,
   now,
 }: {
   run: RunCommand;
   uptime: () => number;
   loadavg: () => number[];
+  cpuMemory?: () => { cpuPercent: number | null; memoryPercent: number | null };
   now: Date;
 }): Entry {
   let uptimeSeconds: number | null = null;
@@ -489,10 +613,25 @@ export function buildHost({
     crons = null;
   }
 
+  let cpuPercent: number | null = null;
+  let memoryPercent: number | null = null;
+  try {
+    const metrics = cpuMemory?.();
+    if (metrics) {
+      cpuPercent = finiteNumber(metrics.cpuPercent);
+      memoryPercent = finiteNumber(metrics.memoryPercent);
+    }
+  } catch {
+    cpuPercent = null;
+    memoryPercent = null;
+  }
+
   return {
     data: {
       uptimeSeconds,
       loadavg: loads,
+      cpuPercent,
+      memoryPercent,
       disk: { usedPct },
       crons,
     },
@@ -502,31 +641,162 @@ export function buildHost({
 }
 
 export function buildApple(
-  paths: Pick<FeedPaths, "apple">,
+  paths: Pick<FeedPaths, "apple"> & Partial<Pick<FeedPaths, "calendar" | "reminders" | "habits" | "goals">>,
   readFile: ReadFile = fs.readFileSync,
 ): Entry {
   try {
     const entry = jsonEntry(paths.apple, "mac", readFile(paths.apple));
-    if (entry.error) return entry;
+    if (entry.error) throw new Error("apple export invalid");
 
     const parsed = isRecord(entry.data) ? entry.data : {};
+    const lists = isRecord(parsed.lists) ? parsed.lists : {};
+    const stamp = asOf(parsed);
+    const listItems = (name: string) =>
+      (Array.isArray(lists[name]) ? lists[name] : [])
+        .filter(isRecord)
+        .map((item) => ({
+          title: typeof item.title === "string" ? stripPrivate(item.title).trim() : "",
+          due: typeof item.due === "string" && Number.isFinite(Date.parse(item.due)) ? item.due : null,
+          flagged: item.flagged === true,
+        }))
+        .filter((item) => item.title.length > 0);
+    const personalAndTasks = [...listItems("Personal"), ...listItems("Tasks")];
+    const reminders = { as_of: stamp, items: personalAndTasks.map((item, index) => ({ id: `apple-reminder-${index}`, ...item })) };
+    const habits = { as_of: stamp, habits: listItems("Habits").map((item, index) => ({ id: `apple-habit-${index}`, title: item.title, trackingMethod: "custom" as const, occurrences: [] })) };
+    const goals = { as_of: stamp, goals: listItems("Goals").map((item) => ({ title: item.title })) };
     return {
       ...entry,
+      updatedAt: stamp ?? entry.updatedAt,
       data: {
-        calendar: parsed.calendar ?? null,
-        reminders: parsed.reminders ?? null,
-        habits: parsed.habits ?? null,
-        goals: parsed.goals ?? null,
+        calendar: isRecord(parsed.calendar) ? { ...parsed.calendar, as_of: stamp } : parsed.calendar ?? null,
+        reminders,
+        habits,
+        goals,
       },
     };
   } catch {
+    const filePaths = [paths.calendar, paths.reminders, paths.habits, paths.goals];
+    const files = filePaths.map((filePath, index) => {
+      if (!filePath) return null;
+      const entry = readJsonEntry(filePath, "box:life-dash", readFile);
+      if (entry.data === null || !isRecord(entry.data)) return null;
+      const kind = ["calendar", "reminders", "habits", "goals"][index];
+      let data: unknown = entry.data;
+      if (kind === "calendar") {
+        const events = Array.isArray(entry.data.events) ? entry.data.events : [];
+        data = { events: events.map(allowlistedCalendarEvent).filter((event) => event !== null) };
+      }
+      return { kind, entry, data };
+    }).filter((item): item is NonNullable<typeof item> => item !== null);
+    if (!files.length) return { data: null, updatedAt: null, source: "mac:not-wired", note: "not connected" };
+    const data: Record<string, unknown> = { calendar: null, reminders: null, habits: null, goals: null };
+    for (const file of files) data[file.kind] = file.data;
+    const timestamps = files.map(({ entry }) => isRecord(entry.data) ? asOf(entry.data) ?? entry.updatedAt : entry.updatedAt).filter((value): value is string => !!value && Number.isFinite(Date.parse(value)));
+    const updatedAt = timestamps.sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? null;
+    return { data, updatedAt, source: "box:life-dash" };
+  }
+}
+
+function allowlistedCalendarEvent(value: unknown): { id: string; title: string; start: string; end: string; calendar: "work" | "personal" } | null {
+  if (!isRecord(value) || typeof value.title !== "string" || !value.title.trim() || typeof value.start !== "string" || typeof value.end !== "string") return null;
+  if (!Number.isFinite(Date.parse(value.start)) || !Number.isFinite(Date.parse(value.end))) return null;
+  const title = value.title.trim();
+  const calendar = typeof value.calendar === "string" && value.calendar.toLowerCase() === "work" ? "work" : "personal";
+  return { id: `${title}:${value.start}`, title, start: value.start, end: value.end, calendar };
+}
+
+function asOf(raw: Record<string, unknown>): string | null {
+  for (const key of ["as_of", "updated_at"]) if (typeof raw[key] === "string" && Number.isFinite(Date.parse(raw[key] as string))) return raw[key] as string;
+  return null;
+}
+
+export function buildWeather(filePath: string, readFile: ReadFile): Entry {
+  const entry = readJsonEntry(filePath, "box:weather", readFile);
+  if (!isRecord(entry.data)) return { data: null, updatedAt: null, source: "box:weather", note: "weather feed missing or invalid" };
+  const raw = entry.data;
+  return { data: { temperature: finiteNumber(raw.now), feelsLike: finiteNumber(raw.feels_like), high: finiteNumber(raw.high), low: finiteNumber(raw.low), condition: typeof raw.condition === "string" ? raw.condition : "", code: finiteNumber(raw.code), unit: raw.unit === "C" ? "C" : "F", location: typeof raw.location === "string" ? raw.location : "", isDay: raw.is_day === true }, updatedAt: asOf(raw), source: "box:weather" };
+}
+
+export function buildGitHub(filePath: string, readFile: ReadFile): Entry {
+  const entry = readJsonEntry(filePath, "box:github", readFile);
+  if (!isRecord(entry.data)) return { data: null, updatedAt: null, source: "box:github", note: "build feed missing or invalid" };
+  const raw = entry.data;
+  const repositories = Array.isArray(raw.repositories) ? raw.repositories.filter(isRecord).map((repo) => ({ name: typeof repo.name === "string" ? repo.name : "", commits: finiteNumber(repo.commits) ?? 0 })) : [];
+  return { data: { ...(raw.scope === "authenticated" ? { scope: "authenticated" } : {}), username: typeof raw.username === "string" ? raw.username : "", commitsToday: finiteNumber(raw.commits_today) ?? 0, activeRepos: finiteNumber(raw.active_repos) ?? 0, openPRs: finiteNumber(raw.open_prs) ?? 0, lastActivity: typeof raw.last_activity === "string" ? raw.last_activity : null, repositories }, updatedAt: asOf(raw), source: "box:github" };
+}
+
+export function buildUsageEntry(
+  paths: FeedPaths,
+  readFile: ReadFile,
+  now: Date,
+): Entry {
+  const state = buildUsageState({
+    paths: {
+      grokPrimary: paths.grokPrimary,
+      grokFallback: paths.grokFallback,
+      chatgpt: paths.chatgpt,
+      opencode: paths.opencode,
+      nous: paths.nous,
+      costSheet: paths.costSheet,
+    },
+    readFile,
+    now,
+  });
+  if (!usageHasAnyData(state)) {
     return {
       data: null,
       updatedAt: null,
-      source: "mac:not-wired",
-      note: "not connected",
+      source: "box:usage",
+      note: "no usage figures",
     };
   }
+  return {
+    data: {
+      providers: state.providers.map(allowlistedUsageRow),
+    },
+    updatedAt: newestUsageAsOf(state) ?? now.toISOString(),
+    source: "box:usage",
+  };
+}
+
+export function buildOpenDecisionsEntry(
+  readFile: ReadFile,
+  filePath: string,
+): DecisionsResult {
+  const file = readOpenDecisions(readFile, filePath);
+  if (!file) {
+    return {
+      ok: false,
+      data: null,
+      updatedAt: null,
+      source: "box:open-decisions",
+      error: "open-decisions missing",
+    };
+  }
+  const feed = openDecisionsToFeed(file);
+  const cards = feed.cards.map((card) => ({
+    id: card.id ?? "",
+    source: card.source ?? "box:open-decisions",
+    bot: card.bot,
+    question: card.question,
+    rec: card.rec ?? "",
+    context: "context" in card && typeof card.context === "string" ? card.context : "",
+    link: "",
+    createdAt: "createdAt" in card && typeof card.createdAt === "string" ? card.createdAt : null,
+    due: null,
+    blocking: Boolean(card.blocking),
+    ageMin: null,
+  }));
+  return {
+    ok: true,
+    data: {
+      generatedAt: feed.generatedAt ?? file.as_of,
+      count: feed.count,
+      cards,
+    },
+    updatedAt: file.as_of,
+    source: "box:open-decisions",
+  };
 }
 
 function buildSnapshotSync(opts: BuildSnapshotOptions): BuiltSnapshot {
@@ -568,15 +838,12 @@ function buildSnapshotSync(opts: BuildSnapshotOptions): BuiltSnapshot {
       health.data === null
         ? health
         : { ...health, data: summarizeHealth(health.data) },
-    host: buildHost({ run, uptime, loadavg, now }),
+    host: buildHost({ run, uptime, loadavg, cpuMemory: opts.cpuMemory ?? readProcMetrics, now }),
     apple: buildApple(paths, readFile),
-    decisions: {
-      ok: false,
-      data: null,
-      updatedAt: null,
-      source: "box:decisions",
-      error: "decisions pending",
-    },
+    weather: buildWeather(paths.weather, readFile),
+    build: buildGitHub(paths.build, readFile),
+    decisions: buildOpenDecisionsEntry(readFile, paths.openDecisions),
+    usage: buildUsageEntry(paths, readFile, now),
   };
   return snapshot;
 }
@@ -593,9 +860,9 @@ export async function buildSnapshotAsync(
   opts: BuildSnapshotOptions = {},
 ): Promise<BuiltSnapshot> {
   const now = opts.now ?? new Date();
-  const snapshot = buildSnapshotSync({ ...opts, now });
-  const decisions = await buildDecisions({ now });
-  return { ...snapshot, decisions };
+  // Open decisions and usage are read synchronously from box files.
+  // Do not fall back to the Decisions.md stockpile.
+  return buildSnapshotSync({ ...opts, now });
 }
 
 export function toKvPayload(snapshot: Snapshot): Record<
@@ -629,6 +896,9 @@ export function toKvPayload(snapshot: Snapshot): Record<
     host: entry(snapshot.host, "box"),
     apple: entry(snapshot.apple, "mac"),
     decisions: entry(snapshot.decisions, "box"),
+    usage: entry(snapshot.usage, "box"),
+    weather: entry(snapshot.weather, "box"),
+    build: entry(snapshot.build, "box"),
   };
 }
 
@@ -680,6 +950,15 @@ export function summarize(snapshot: Snapshot): Record<
     host: summarizeEntry(snapshot.host),
     apple: summarizeEntry(snapshot.apple),
     decisions: { ...decisionsSummary, count: decisionsCount },
+    usage: summarizeEntry(
+      snapshot.usage ?? {
+        data: null,
+        updatedAt: null,
+        source: "box:usage",
+      },
+    ),
+    weather: summarizeEntry(snapshot.weather ?? { data: null, updatedAt: null, source: "box:weather" }),
+    build: summarizeEntry(snapshot.build ?? { data: null, updatedAt: null, source: "box:github" }),
   };
 }
 
@@ -717,6 +996,9 @@ const FEED_DOMAINS = [
   "host",
   "apple",
   "decisions",
+  "usage",
+  "weather",
+  "build",
 ] as const;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
