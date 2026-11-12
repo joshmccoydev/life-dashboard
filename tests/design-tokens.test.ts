@@ -10,34 +10,37 @@ const tokens = readFileSync(tokensPath, "utf8");
 
 test("shared Dracula tokens and LifeDash aliases are present", () => {
   for (const token of [
-    "--bg: #282A36",
-    "--surface: #44475A",
-    "--surface-hover: #515365",
-    "--fg: #F8F8F2",
-    "--fg-muted: #B2BACE",
-    "--focus-ring: 2px solid #FF79C6",
-    "--font-ui: \"Inter\"",
-    "--font-mono: \"JetBrains Mono\"",
-    "--color-canvas: var(--bg)",
-    "--color-text: var(--fg)",
+    "--bg: #191a21",
+    "--text: #f8f8f2",
+    "--elev: #282a36",
+    "--muted-aaa: #adb5da",
+    "--grok: #bd93f9",
+    "--hermes: #8be9fd",
+    "--font-sans: \"Geist\"",
+    "--font-mono: \"Geist Mono\"",
+    "--font-serif: \"Instrument Serif\"",
+    "--fg: var(--text)",
+    "--fg-muted: var(--muted-aaa)",
+    "--surface: var(--elev)",
+    "--font-ui: var(--font-sans)",
+    "--focus-ring: 2px solid var(--accent)",
   ]) assert.ok(tokens.includes(token), `missing ${token}`);
 });
 
-test("Inter and JetBrains Mono use the shipped SIL OFL font files", () => {
+test("Geist and Instrument Serif use the shipped SIL OFL font files", () => {
   const globals = readFileSync(join(root, "src/app/globals.css"), "utf8");
   const fonts = [
-    "inter-latin-400.woff2",
-    "inter-latin-500.woff2",
-    "inter-latin-600.woff2",
-    "jetbrains-mono-latin-400.woff2",
-    "jetbrains-mono-latin-500.woff2",
+    "geist-latin-var.woff2",
+    "geist-mono-latin-var.woff2",
+    "instrument-serif-latin-regular.woff2",
+    "instrument-serif-latin-italic.woff2",
   ];
   for (const font of fonts) {
     assert.ok(readFileSync(join(root, "public/fonts", font)).byteLength > 0, font);
-    assert.ok(globals.includes(font), `${font} should be registered`);
+    assert.ok(globals.includes(font) || tokens.includes(font), `${font} should be registered`);
   }
-  assert.match(readFileSync(join(root, "public/fonts/OFL-Inter.txt"), "utf8"), /SIL OPEN FONT LICENSE/i);
-  assert.match(readFileSync(join(root, "public/fonts/OFL-JetBrainsMono.txt"), "utf8"), /SIL OPEN FONT LICENSE/i);
+  assert.match(readFileSync(join(root, "public/fonts/OFL-Geist.txt"), "utf8"), /SIL OPEN FONT LICENSE/i);
+  assert.match(readFileSync(join(root, "public/fonts/OFL-InstrumentSerif.txt"), "utf8"), /SIL OPEN FONT LICENSE/i);
 });
 
 test("UI source has no raw hex colors outside the shared token file", () => {
