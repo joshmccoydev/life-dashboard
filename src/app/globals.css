@@ -20,7 +20,7 @@ body {
 body {
   margin: 0;
   line-height: 1.2;
-  overflow-x: clip;
+  overflow-x: hidden;
   overflow-wrap: anywhere;
 }
 
@@ -1059,10 +1059,6 @@ body main.dashboard {
   .dashboard-money-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-@media (min-width: 1024px) {
-  .dashboard-tabs { flex-wrap: nowrap; }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .dashboard * { scroll-behavior: auto !important; }
 }
@@ -1075,6 +1071,8 @@ body main.dashboard {
 }
 
 @media (min-width: 1024px) {
+  .dashboard-tabs { flex-wrap: nowrap; }
+
   body main.dashboard {
     max-width: min(1680px, calc(100svh * 16 / 9));
     height: auto;

@@ -67,7 +67,7 @@ test("openDecisionsToFeed maps owner_bot and title, never stockpile fields", () 
 test("Archive's on-disk list is 10 items, most urgent first, and home uses 5", () => {
   const file = readOpenDecisions((path) => readFileSync(path, "utf8"));
   assert.ok(file);
-  assert.equal(file.as_of, "2026-11-12T10:51:00-06:00");
+  assert.equal(file.as_of, "2026-11-12T12:15:00-06:00");
   assert.equal(file.items.length, 10);
   assert.equal(file.items[0].id, "lease-first-month");
   assert.equal(file.items[4].id, "piba-venue-question");

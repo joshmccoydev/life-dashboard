@@ -118,27 +118,29 @@ test("every consumer of the dashboard clock follows the ticking clock", () => {
   }
 });
 
-test("a +10 minute outage shows six stale feed sources and +6 alerts", () => {
-  const html = squash(ssr(T + 10 * MINUTE, T, { connectionError: true }));
+test("a +25 hour outage shows ten stale feed sources and +10 alerts", () => {
+  const html = squash(ssr(T + 25 * HOUR, T, { connectionError: true }));
   assert.ok(!html.includes("FEED ATTENTION"), "FEED ATTENTION was replaced by the money alert chip");
   assert.ok(html.includes("Connection interrupted"));
-  assert.ok(html.includes("<small>+6</small>"), "six further alerts");
-  // six feed sources are past 2 x refreshMs; calendar shows in two widgets
-  assert.ok(((html.match(/STALE 10m/g) ?? []).length) >= 1, "stale age appears on the ticking clock");
+  // All ten fixture feeds are past the 24h window. Night mode shows connection
+  // plus stale-* alerts; the chip is the further-alert count after the one in view.
+  assert.ok(html.includes("<small>+10</small>"), "ten further alerts");
+  assert.ok(((html.match(/STALE 1d/g) ?? []).length) >= 1, "stale age appears on the ticking clock");
   assert.equal((html.match(/data stale/g) ?? []).length, 0, "night mode shows one rotating alert");
 });
 
-test("a +7 hour outage reads MORNING MODE with +11 alerts", () => {
+test("a +7 hour outage reads MORNING MODE and is still inside the 24h window", () => {
   const html = squash(ssr(T + 7 * HOUR, T, { connectionError: true }));
   assert.ok(html.includes("MORNING MODE"), "unforced mode follows the clock");
-  assert.ok(html.includes("<small>+11</small>"), "eleven further alerts");
-  assert.ok(html.includes("STALE 7h"));
+  assert.ok(!html.includes("STALE"), "7h is inside the 24h stale window");
   assert.ok(squash(ssr(T, T)).includes("NIGHT MODE"), "control: night at t0");
 });
 
 test("a refresh newer than the ticking clock is adopted at once", () => {
-  const html = squash(ssr(T, T + 5 * MINUTE));
-  assert.ok(html.includes("STALE 5m"), "feeds age against receivedAt immediately");
+  // receivedAt is 25h after lastSuccess (~T); a clock stuck at T would not
+  // mark feeds stale, so STALE 1d proves receivedAt was adopted.
+  const html = squash(ssr(T, T + 25 * HOUR));
+  assert.ok(html.includes("STALE 1d"), "feeds age against receivedAt immediately");
 });
 
 // ---- the mounted component and real hook -------------------------------------
@@ -191,20 +193,17 @@ test("the mounted dashboard keeps ticking through failures after a refresh", asy
     await page.advance(30_000);
     assert.ok(page.text().includes("SYSTEMS NORMAL"), "refresh accepted");
     assert.ok(!page.text().includes("Connection interrupted"));
-    // from here every poll fails; lastSuccess stays at T+29 s, stale after 60 s
+    // from here every poll fails; lastSuccess stays at T+29 s, stale after 24h
     online = false;
-    await page.advance(45_000, 15_000); // to T+75 s: ticks at 45, 60, 75 (age 46 s)
-    await page.advance(14_999); // T+89.999 s: the next tick is 1 ms away
+    await page.advance(45_000, 15_000); // to T+75 s
     assert.ok(page.text().includes("Connection interrupted"), "failure surfaces");
-    assert.ok(!page.text().includes("STALE"), "no tick has aged the feeds yet");
-    await page.advance(1); // T+90 s: the 15 s tick lands, age 61 s
-    assert.ok(page.text().includes("STALE 1m"), "the 15 s tick aged the feeds");
-    await page.advance(10 * MINUTE);
-    assert.ok(page.text().includes("STALE 11m"));
+    assert.ok(!page.text().includes("STALE"), "24h window not crossed yet");
+    await page.advance(24 * HOUR); // age ~24h+46s → stale, ageLabel 1d
+    assert.ok(page.text().includes("STALE 1d"), "the 15 s tick aged the feeds past 24h");
     assert.ok(!page.text().includes("FEED ATTENTION"), "stale feeds do not set FEED ATTENTION");
     await page.advance(7 * HOUR);
     assert.ok(page.text().includes("MORNING MODE"), "mode follows the ticking clock");
-    assert.ok(page.text().includes("STALE 7h"));
+    assert.ok(page.text().includes("STALE 1d"));
   } finally {
     await page.unmount();
     globalThis.fetch = realFetch;
@@ -214,7 +213,9 @@ test("the mounted dashboard keeps ticking through failures after a refresh", asy
 
 test("the mounted dashboard adopts a newer receivedAt, then advances with the tick", async () => {
   mock.timers.enable({ apis: ["setInterval", "Date"], now: T });
-  const data = feedsAt(T - 119 * SECOND, 30 * SECOND); // 119 s old at T
+  // 23.5h old at receivedAt T: inside the 24h window. The seeded renderedAt
+  // (T-1h) would already be stale (24.5h). After 30m15s the tick crosses 24h.
+  const data = feedsAt(T - (23 * HOUR + 30 * MINUTE), 30 * SECOND);
   const page = await mount(
     createElement(Dashboard, {
       initial: data,
@@ -224,11 +225,11 @@ test("the mounted dashboard adopts a newer receivedAt, then advances with the ti
     }),
   );
   try {
-    assert.ok(page.text().includes("STALE 1m"), "adopted receivedAt, not the seeded hour-old clock");
-    await page.advance(14_999);
-    assert.ok(page.text().includes("STALE 1m"), "no tick yet");
-    await page.advance(1);
-    assert.ok(page.text().includes("STALE 2m"), "the tick moved past receivedAt (134 s)");
+    assert.ok(!page.text().includes("STALE"), "adopted receivedAt, not the seeded hour-old clock");
+    await page.advance(30 * MINUTE); // exact 24h: still fresh (`>` not `>=`)
+    assert.ok(!page.text().includes("STALE"), "exact 24h is still fresh");
+    await page.advance(15_000); // 24h+15s
+    assert.ok(page.text().includes("STALE 1d"), "the tick moved past 24h");
   } finally {
     await page.unmount();
     mock.timers.reset();

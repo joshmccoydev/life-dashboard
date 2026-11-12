@@ -157,7 +157,7 @@ test("failure retains last known real data, then recovers on success", async () 
   assert.equal(recovered.status, "ready");
   assert.equal(recovered.error, null);
   assert.equal(
-    readState(good, new Date(now.getTime() + 180000)).status,
+    readState(good, new Date(now.getTime() + 25 * 60 * 60 * 1000)).status,
     "stale",
   );
 });
@@ -320,7 +320,7 @@ test("deterministic alerts cover offline service, disk, overdue, meeting, bill a
     },
   ];
   data.weather.lastSuccess = new Date(
-    now.getTime() - data.weather.refreshMs * 3,
+    now.getTime() - 25 * 60 * 60 * 1000,
   ).toISOString();
   const alerts = evaluateAlerts(data, now);
   for (const id of [
@@ -912,7 +912,7 @@ test("import freshness reflects import time rather than repeated file reads", as
   const data = normalizeHealthImport(
     {
       version: 1,
-      importedAt: "2026-09-15T12:00:00Z",
+      importedAt: "2026-09-14T13:00:00Z",
       timezone: zone,
       days: [
         {
@@ -938,7 +938,7 @@ test("import freshness reflects import time rather than repeated file reads", as
     fetch: async () => data,
   };
   const result = await refreshAdapter(adapter, adapter, undefined, now, 600000);
-  assert.equal(result.lastSuccess, "2026-09-15T12:00:00Z");
+  assert.equal(result.lastSuccess, "2026-09-14T13:00:00Z");
   assert.equal(result.status, "stale");
   assert.equal(result.data!.sleepMinutes, null);
 });

@@ -930,7 +930,7 @@ function RemindersPanel({ data, now }: { data: DashboardData; now: Date }) {
       ) : groups.some((group) => group.items.length) ? (
         <div className="dashboard-reminder-list">
           {groups.map(({ label, items }) => items.length ? (
-            <section className="dashboard-reminder-group" key={label} aria-label={label}>
+            <div className="dashboard-reminder-group" key={label} aria-label={label}>
               <h3>{label}</h3>
               {items.map((reminder) => (
                 <div className="domain-list-row" key={reminder.id}>
@@ -938,7 +938,7 @@ function RemindersPanel({ data, now }: { data: DashboardData; now: Date }) {
                   {label === "No date" ? null : <strong>{formatBillDue(reminder.due)}</strong>}
                 </div>
               ))}
-            </section>
+            </div>
           ) : null)}
         </div>
       ) : (

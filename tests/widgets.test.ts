@@ -7,23 +7,28 @@ import { WIDGETS } from "../src/components/widgets/definitions";
 
 const now = new Date("2026-10-03T04:08:00.000Z");
 const refreshMs = 30000;
+const DAY = 24 * 60 * 60 * 1000;
 
 test("isWidgetStale is exactly isStale, including a feed that is stale by default", () => {
   for (const lastSuccess of [
     "2026-10-03T04:07:59.000Z", // 1 s old: fresh
-    "2026-10-03T04:07:00.000Z", // 2x refreshMs: still fresh at the boundary
-    "2026-10-03T04:06:30.000Z", // 3x refreshMs: stale under the 2x default
-    "2026-10-03T04:05:00.000Z", // 6x refreshMs: stale
+    new Date(now.getTime() - DAY + 1000).toISOString(), // just under 24h: fresh
+    new Date(now.getTime() - DAY).toISOString(), // exactly 24h: fresh (`>` not `>=`)
+    new Date(now.getTime() - DAY - 1000).toISOString(), // just over 24h: stale
+    "2026-10-01T04:08:00.000Z", // two days: stale
     null,
   ]) {
     const state = { lastSuccess, refreshMs };
     assert.equal(isWidgetStale(state, now), isStale(lastSuccess, now, refreshMs));
   }
-  // Pin the default factor: a 3x-refresh age must read stale, so widening the
-  // factor to 3x or 5x fails here.
+  // Pin the 24h contract: just over 24h is stale; just under is fresh.
   assert.equal(
-    isWidgetStale({ lastSuccess: "2026-10-03T04:06:30.000Z", refreshMs }, now),
+    isWidgetStale({ lastSuccess: new Date(now.getTime() - DAY - 1).toISOString(), refreshMs }, now),
     true,
+  );
+  assert.equal(
+    isWidgetStale({ lastSuccess: new Date(now.getTime() - DAY + 1).toISOString(), refreshMs }, now),
+    false,
   );
 });
 

@@ -167,9 +167,9 @@ test("buildApple passes only the four allowlisted data keys", () => {
   ]);
   assert.deepEqual(data, {
     calendar: [1],
-    reminders: [],
-    habits: null,
-    goals: null,
+    reminders: { as_of: null, items: [] },
+    habits: { as_of: null, habits: [] },
+    goals: { as_of: null, goals: [] },
   });
   assert.equal(Object.hasOwn(data, "extra"), false);
 });
