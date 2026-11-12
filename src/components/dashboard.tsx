@@ -715,6 +715,7 @@ function DashboardStyles() {
       .dashboard-home {
         grid-template-columns: 1fr;
         padding: var(--space-3) var(--space-4);
+        align-items: start;
       }
 
       .dashboard-card {
@@ -734,6 +735,8 @@ function DashboardStyles() {
 
       .dashboard-panel-header {
         justify-content: space-between;
+        align-items: flex-start;
+        flex-wrap: wrap;
         gap: var(--space-3);
         padding: var(--space-3) var(--space-4);
         border-bottom: 1px solid var(--color-border);
@@ -742,6 +745,7 @@ function DashboardStyles() {
       .dashboard-panel-heading {
         gap: var(--space-2);
         min-width: 0;
+        flex: 0 0 auto;
       }
 
       .dashboard-panel-heading svg {
@@ -755,6 +759,7 @@ function DashboardStyles() {
         font-size: var(--type-tier-3);
         font-weight: 600;
         letter-spacing: 0;
+        white-space: nowrap;
       }
 
       .dashboard-panel-meta {
@@ -928,7 +933,9 @@ function DashboardStyles() {
 
         .dashboard-card-bots,
         .dashboard-card-health,
-        .dashboard-card-systems {
+        .dashboard-card-systems,
+        .dashboard-card-money,
+        .dashboard-card-decisions {
           grid-column: span 2;
         }
 
@@ -944,15 +951,20 @@ function DashboardStyles() {
         }
       }
 
-      @media (min-width: 1024px) {
+      @media (min-width: 1280px) {
         .dashboard-home {
           grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
         .dashboard-card-bots,
         .dashboard-card-health,
-        .dashboard-card-systems {
+        .dashboard-card-systems,
+        .dashboard-card-money {
           grid-column: span 1;
+        }
+
+        .dashboard-card-decisions {
+          grid-column: span 2;
         }
       }
     `}</style>
